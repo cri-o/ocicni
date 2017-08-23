@@ -7,15 +7,15 @@ func (noop *cniNoOp) Name() string {
 	return "CNINoOp"
 }
 
-func (noop *cniNoOp) SetUpPod(netnsPath string, namespace string, name string, containerID string) error {
+func (noop *cniNoOp) SetUpPod(network PodNetwork) error {
 	return nil
 }
 
-func (noop *cniNoOp) TearDownPod(netnsPath string, namespace string, name string, containerID string) error {
+func (noop *cniNoOp) TearDownPod(network PodNetwork) error {
 	return nil
 }
 
-func (noop *cniNoOp) GetContainerNetworkStatus(netnsPath string, namespace string, name string, containerID string) (string, error) {
+func (noop *cniNoOp) GetPodNetworkStatus(netnsPath string) (string, error) {
 	return "", nil
 }
 
