@@ -344,11 +344,11 @@ func (plugin *cniNetworkPlugin) TearDownPod(podNetwork PodNetwork) error {
 
 // TODO: Use the addToNetwork function to obtain the IP of the Pod. That will assume idempotent ADD call to the plugin.
 // Also fix the runtime's call to Status function to be done only in the case that the IP is lost, no need to do periodic calls
-func (plugin *cniNetworkPlugin) GetPodNetworkStatus(netnsPath string) (string, error) {
+func (plugin *cniNetworkPlugin) GetPodNetworkStatus(podNetwork PodNetwork) (string, error) {
 	plugin.podLock(podNetwork).Lock()
 	defer plugin.podUnlock(podNetwork)
 
-	ip, err := getContainerIP(plugin.nsenterPath, netnsPath, DefaultInterfaceName, "-4")
+	ip, err := getContainerIP(plugin.nsenterPath, podNetwork.NetNS, DefaultInterfaceName, "-4")
 	if err != nil {
 		return "", err
 	}
