@@ -150,23 +150,13 @@ func InitCNI(pluginDir string, cniDirs ...string) (CNIPlugin, error) {
 		return nil, err
 	}
 
-	// check if a default network exists, otherwise dump the CNI search and return a noop plugin
-	_, err = getDefaultCNINetwork(plugin.pluginDir, plugin.cniDirs, plugin.vendorCNIDirPrefix)
-	if err != nil {
-		if err != errMissingDefaultNetwork {
-			logrus.Warningf("Error in finding usable CNI plugin - %v", err)
-			// create a noop plugin instead
-			return &cniNoOp{}, nil
-		}
-
-		// Fail loudly if plugin directory doesn't exist, because fsnotify watcher
-		// won't be able to watch it.
-		if _, err := os.Stat(pluginDir); err != nil {
-			return nil, err
-		}
-		// We do not have a default network, we start the monitoring thread.
-		go plugin.monitorNetDir()
+	// Fail loudly if plugin directory doesn't exist, because fsnotify watcher
+	// won't be able to watch it.
+	if _, err := os.Stat(plugin.pluginDir); err != nil {
+		return nil, err
 	}
+	// Start the monitoring thread.
+	go plugin.monitorNetDir()
 
 	return plugin, nil
 }
