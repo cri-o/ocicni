@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/cri-o/ocicni/pkg/ocicni"
+	cnicurrent "github.com/containernetworking/cni/pkg/types/current"
 )
 
 const (
@@ -49,7 +50,25 @@ func main() {
 
 	switch os.Args[1] {
 	case CmdAdd:
-		exit(plugin.SetUpPod(podNetwork))
+		result, err := plugin.SetUpPod(podNetwork)
+		if result != nil {
+			var result030 *cnicurrent.Result
+			result030, err = cnicurrent.GetResult(result)
+			if result030 != nil {
+				for _, ip := range result030.IPs {
+					intfDetails := ""
+					if *ip.Interface >= 0 && *ip.Interface < len(result030.Interfaces) {
+						intf := result030.Interfaces[*ip.Interface]
+						// Only print container sandbox interfaces (not host ones)
+						if intf.Sandbox != "" {
+							intfDetails = fmt.Sprintf(" (%s %s)", intf.Name, intf.Mac)
+						}
+					}
+					fmt.Fprintf(os.Stdout, "IP: %s%s\n", ip.Address.String(), intfDetails)
+				}
+			}
+		}
+		exit(err)
 	case CmdStatus:
 		ip, err := plugin.GetPodNetworkStatus(podNetwork)
 		if err != nil {
