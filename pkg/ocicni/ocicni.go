@@ -133,8 +133,24 @@ func (plugin *cniNetworkPlugin) monitorNetDir() {
 	}()
 
 	if err = watcher.Add(plugin.pluginDir); err != nil {
-		logrus.Error(err)
+		logrus.Errorf("Failed to add watch on %q: %v", plugin.pluginDir, err)
 		return
+	}
+
+	// Now that `watcher` is running and watching the `pluginDir`
+	// gather the initial configuration. It has to be done in this
+	// order to avoid missing any updates which might otherwise
+	// occur between gathering the initial configuration and
+	// starting the watcher.
+	//
+	// This is races with the goroutine above which consumes
+	// events, but the use of `plugin.Lock()` in
+	// `plugin.setDefaultNetwork()` avoids anything bad happening
+	// (at worst we pointlessly sync the config a second time).
+	if err := plugin.syncNetworkConfig(); err != nil {
+		logrus.Infof("Initial CNI setting failed, continue monitoring: %v", err)
+	} else {
+		logrus.Infof("Initial CNI setting succeeded")
 	}
 
 	<-plugin.monitorNetDirChan
@@ -167,12 +183,7 @@ func InitCNI(pluginDir string, cniDirs ...string) (CNIPlugin, error) {
 		return nil, err
 	}
 
-	if err := plugin.syncNetworkConfig(); err != nil {
-		// We do not have a valid default network, so start the
-		// monitoring thread.  Network setup/teardown requests
-		// will fail until we have a valid default network.
-		go plugin.monitorNetDir()
-	}
+	go plugin.monitorNetDir()
 
 	return plugin, nil
 }
