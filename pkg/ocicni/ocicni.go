@@ -175,7 +175,7 @@ func InitCNI(pluginDir string, cniDirs ...string) (CNIPlugin, error) {
 
 	// Ensure plugin directory exists, because the following monitoring logic
 	// relies on that.
-	if err := os.MkdirAll(pluginDir); err != nil {
+	if err := os.MkdirAll(pluginDir, 0755); err != nil {
 		return nil, err
 	}
 
