@@ -61,4 +61,7 @@ type CNIPlugin interface {
 
 	// NetworkStatus returns error if the network plugin is in error state
 	Status() error
+
+	// Shutdown terminates all driver operations
+	Shutdown() error
 }
