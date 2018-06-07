@@ -23,12 +23,13 @@ type cniNetworkPlugin struct {
 	defaultNetName string
 	networks       map[string]*cniNetwork
 
-	nsManager          *nsManager
-	pluginDir          string
-	cniDirs            []string
-	vendorCNIDirPrefix string
+	nsManager *nsManager
+	confDir   string
+	binDirs   []string
 
-	monitorNetDirChan chan struct{}
+	shutdownChan chan struct{}
+	watcher      *fsnotify.Watcher
+	done         *sync.WaitGroup
 
 	// The pod map provides synchronization for a given pod's network
 	// operations.  Each pod's setup/teardown/status operations
@@ -101,90 +102,85 @@ func (plugin *cniNetworkPlugin) podUnlock(podNetwork PodNetwork) {
 	}
 }
 
-func (plugin *cniNetworkPlugin) monitorNetDir() {
+func newWatcher(confDir string) (*fsnotify.Watcher, error) {
+	// Ensure plugin directory exists, because the following monitoring logic
+	// relies on that.
+	if err := os.MkdirAll(confDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create %q: %v", confDir, err)
+	}
+
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		logrus.Errorf("could not create new watcher %v", err)
-		return
+		return nil, fmt.Errorf("could not create new watcher %v", err)
 	}
-	defer watcher.Close()
-
-	if err = watcher.Add(plugin.pluginDir); err != nil {
-		logrus.Errorf("Failed to add watch on %q: %v", plugin.pluginDir, err)
-		return
-	}
-
-	// Now that `watcher` is running and watching the `pluginDir`
-	// gather the initial configuration, before starting the
-	// goroutine which will actually process events. It has to be
-	// done in this order to avoid missing any updates which might
-	// otherwise occur between gathering the initial configuration
-	// and starting the watcher.
-	if err := plugin.syncNetworkConfig(); err != nil {
-		logrus.Infof("Initial CNI setting failed, continue monitoring: %v", err)
-	} else {
-		logrus.Infof("Initial CNI setting succeeded")
-	}
-
-	go func() {
-		for {
-			select {
-			case event := <-watcher.Events:
-				logrus.Debugf("CNI monitoring event %v", event)
-				if event.Op&fsnotify.Create != fsnotify.Create &&
-					event.Op&fsnotify.Write != fsnotify.Write {
-					continue
-				}
-
-				if err = plugin.syncNetworkConfig(); err != nil {
-					logrus.Errorf("CNI config loading failed, continue monitoring: %v", err)
-					continue
-				}
-
-				// Stop watching when we have a default network
-				if plugin.getDefaultNetwork() != nil {
-					logrus.Infof("Found CNI default network; stop watching")
-					close(plugin.monitorNetDirChan)
-					return
-				}
-
-			case err := <-watcher.Errors:
-				if err == nil {
-					continue
-				}
-				logrus.Errorf("CNI monitoring error %v", err)
-				close(plugin.monitorNetDirChan)
-				return
-			}
+	defer func() {
+		// Close watcher on error
+		if err != nil {
+			watcher.Close()
 		}
 	}()
 
-	<-plugin.monitorNetDirChan
+	if err = watcher.Add(confDir); err != nil {
+		return nil, fmt.Errorf("failed to add watch on %q: %v", confDir, err)
+	}
+
+	return watcher, nil
 }
 
-// InitCNI takes the plugin directory and CNI directories where the CNI config
-// files should be searched for.  If no valid CNI configs exist, network requests
-// will fail until valid CNI config files are present in the config directory.
+func (plugin *cniNetworkPlugin) monitorConfDir(start *sync.WaitGroup) {
+	start.Done()
+	plugin.done.Add(1)
+	defer plugin.done.Done()
+	for {
+		select {
+		case event := <-plugin.watcher.Events:
+			logrus.Warningf("CNI monitoring event %v", event)
+			if event.Op&fsnotify.Create != fsnotify.Create &&
+				event.Op&fsnotify.Write != fsnotify.Write {
+				continue
+			}
+
+			if err := plugin.syncNetworkConfig(); err != nil {
+				logrus.Errorf("CNI config loading failed, continue monitoring: %v", err)
+				continue
+			}
+
+		case err := <-plugin.watcher.Errors:
+			if err == nil {
+				continue
+			}
+			logrus.Errorf("CNI monitoring error %v", err)
+			return
+
+		case <-plugin.shutdownChan:
+			return
+		}
+	}
+}
+
+// InitCNI takes a binary directory in which to search for CNI plugins, and
+// a configuration directory in which to search for CNI JSON config files.
+// If no valid CNI configs exist, network requests will fail until valid CNI
+// config files are present in the config directory.
 // If defaultNetName is not empty, a CNI config with that network name will
 // be used as the default CNI network, and container network operations will
 // fail until that network config is present and valid.
-func InitCNI(defaultNetName string, pluginDir string, cniDirs ...string) (CNIPlugin, error) {
-	vendorCNIDirPrefix := ""
-	if pluginDir == "" {
-		pluginDir = DefaultNetDir
+func InitCNI(defaultNetName string, confDir string, binDirs ...string) (CNIPlugin, error) {
+	if confDir == "" {
+		confDir = DefaultConfDir
 	}
-	if len(cniDirs) == 0 {
-		cniDirs = []string{DefaultCNIDir}
+	if len(binDirs) == 0 {
+		binDirs = []string{DefaultBinDir}
 	}
 	plugin := &cniNetworkPlugin{
-		defaultNetName:     defaultNetName,
-		networks:           make(map[string]*cniNetwork),
-		loNetwork:          getLoNetwork(cniDirs, vendorCNIDirPrefix),
-		pluginDir:          pluginDir,
-		cniDirs:            cniDirs,
-		vendorCNIDirPrefix: vendorCNIDirPrefix,
-		monitorNetDirChan:  make(chan struct{}),
-		pods:               make(map[string]*podLock),
+		defaultNetName: defaultNetName,
+		networks:       make(map[string]*cniNetwork),
+		loNetwork:      getLoNetwork(binDirs),
+		confDir:        confDir,
+		binDirs:        binDirs,
+		shutdownChan:   make(chan struct{}),
+		done:           &sync.WaitGroup{},
+		pods:           make(map[string]*podLock),
 	}
 
 	nsm, err := newNSManager()
@@ -193,19 +189,23 @@ func InitCNI(defaultNetName string, pluginDir string, cniDirs ...string) (CNIPlu
 	}
 	plugin.nsManager = nsm
 
-	// Ensure plugin directory exists, because the following monitoring logic
-	// relies on that.
-	if err := os.MkdirAll(pluginDir, 0755); err != nil {
+	plugin.syncNetworkConfig()
+
+	plugin.watcher, err = newWatcher(plugin.confDir)
+	if err != nil {
 		return nil, err
 	}
 
-	go plugin.monitorNetDir()
+	startWg := sync.WaitGroup{}
+	startWg.Add(1)
+	go plugin.monitorConfDir(&startWg)
+	startWg.Wait()
 
 	return plugin, nil
 }
 
 func (plugin *cniNetworkPlugin) loadNetworks() (map[string]*cniNetwork, string, error) {
-	files, err := libcni.ConfFiles(plugin.pluginDir, []string{".conf", ".conflist", ".json"})
+	files, err := libcni.ConfFiles(plugin.confDir, []string{".conf", ".conflist", ".json"})
 	switch {
 	case err != nil:
 		return nil, "", err
@@ -251,18 +251,10 @@ func (plugin *cniNetworkPlugin) loadNetworks() (map[string]*cniNetwork, string, 
 
 		logrus.Infof("Found CNI network %s (type=%v) at %s", confList.Name, confList.Plugins[0].Network.Type, confFile)
 
-		// Search for vendor-specific plugins as well as default plugins in the CNI codebase.
-		cninet := &libcni.CNIConfig{
-			Path: plugin.cniDirs,
-		}
-		for _, p := range confList.Plugins {
-			vendorDir := vendorCNIDir(plugin.vendorCNIDirPrefix, p.Network.Type)
-			cninet.Path = append(cninet.Path, vendorDir)
-		}
 		networks[confList.Name] = &cniNetwork{
 			name:          confList.Name,
 			NetworkConfig: confList,
-			CNIConfig:     cninet,
+			CNIConfig:     &libcni.CNIConfig{Path: plugin.binDirs},
 		}
 
 		if defaultNetName == "" {
@@ -271,17 +263,13 @@ func (plugin *cniNetworkPlugin) loadNetworks() (map[string]*cniNetwork, string, 
 	}
 
 	if len(networks) == 0 {
-		return nil, "", fmt.Errorf("No valid networks found in %s", plugin.pluginDir)
+		return nil, "", fmt.Errorf("No valid networks found in %s", plugin.confDir)
 	}
 
 	return networks, defaultNetName, nil
 }
 
-func vendorCNIDir(prefix, pluginType string) string {
-	return fmt.Sprintf(VendorCNIDirTemplate, prefix, pluginType)
-}
-
-func getLoNetwork(cniDirs []string, vendorDirPrefix string) *cniNetwork {
+func getLoNetwork(binDirs []string) *cniNetwork {
 	loConfig, err := libcni.ConfListFromBytes([]byte(`{
   "cniVersion": "0.2.0",
   "name": "cni-loopback",
@@ -294,14 +282,10 @@ func getLoNetwork(cniDirs []string, vendorDirPrefix string) *cniNetwork {
 		// catch this
 		panic(err)
 	}
-	vendorDir := vendorCNIDir(vendorDirPrefix, loConfig.Plugins[0].Network.Type)
-	cninet := &libcni.CNIConfig{
-		Path: append(cniDirs, vendorDir),
-	}
 	loNetwork := &cniNetwork{
 		name:          "lo",
 		NetworkConfig: loConfig,
-		CNIConfig:     cninet,
+		CNIConfig:     &libcni.CNIConfig{Path: binDirs},
 	}
 
 	return loNetwork
