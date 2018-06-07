@@ -204,8 +204,8 @@ func InitCNI(defaultNetName string, confDir string, binDirs ...string) (CNIPlugi
 	return plugin, nil
 }
 
-func (plugin *cniNetworkPlugin) loadNetworks() (map[string]*cniNetwork, string, error) {
-	files, err := libcni.ConfFiles(plugin.confDir, []string{".conf", ".conflist", ".json"})
+func loadNetworks(confDir string, binDirs []string) (map[string]*cniNetwork, string, error) {
+	files, err := libcni.ConfFiles(confDir, []string{".conf", ".conflist", ".json"})
 	switch {
 	case err != nil:
 		return nil, "", err
@@ -254,7 +254,7 @@ func (plugin *cniNetworkPlugin) loadNetworks() (map[string]*cniNetwork, string, 
 		networks[confList.Name] = &cniNetwork{
 			name:          confList.Name,
 			NetworkConfig: confList,
-			CNIConfig:     &libcni.CNIConfig{Path: plugin.binDirs},
+			CNIConfig:     &libcni.CNIConfig{Path: binDirs},
 		}
 
 		if defaultNetName == "" {
@@ -263,7 +263,7 @@ func (plugin *cniNetworkPlugin) loadNetworks() (map[string]*cniNetwork, string, 
 	}
 
 	if len(networks) == 0 {
-		return nil, "", fmt.Errorf("No valid networks found in %s", plugin.confDir)
+		return nil, "", fmt.Errorf("No valid networks found in %s", confDir)
 	}
 
 	return networks, defaultNetName, nil
@@ -292,9 +292,8 @@ func getLoNetwork(binDirs []string) *cniNetwork {
 }
 
 func (plugin *cniNetworkPlugin) syncNetworkConfig() error {
-	networks, defaultNetName, err := plugin.loadNetworks()
+	networks, defaultNetName, err := loadNetworks(plugin.confDir, plugin.binDirs)
 	if err != nil {
-		logrus.Errorf("Error loading CNI networks: %s", err)
 		return err
 	}
 
