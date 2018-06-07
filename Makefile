@@ -44,13 +44,16 @@ binaries: ocicnitool
 ocicnitool: .gopathok $(shell hack/find-godeps.sh $(GOPKGDIR) tools/ocicnitool $(PROJECT))
 	$(GO) build $(LDFLAGS) -tags "$(BUILDTAGS)" -o $@ $(PROJECT)/tools/ocicnitool
 
+check: .gopathok
+	@./hack/test-go.sh $(GOPKGDIR)
+	@./hack/verify-gofmt.sh
+
 clean:
 ifneq ($(GOPATH),)
 	rm -f "$(GOPATH)/.gopathok"
 endif
 	rm -rf _output
 
-.PHONY: .gitvalidation
 # When this is running in travis, it will only check the travis commit range
 .gitvalidation: .gopathok
 ifeq ($(TRAVIS),true)
@@ -58,8 +61,6 @@ ifeq ($(TRAVIS),true)
 else
 	GIT_CHECK_EXCLUDE="./vendor ./_output" $(GOPATH)/bin/git-validation -v -run DCO,short-subject,dangling-whitespace -range $(EPOCH_TEST_COMMIT)..HEAD
 endif
-
-.PHONY: install.tools
 
 install.tools: .install.gitvalidation
 
@@ -73,5 +74,7 @@ install.tools: .install.gitvalidation
 	clean \
 	default \
 	gofmt \
-	help
-
+	help \
+	check \
+	install.tools \
+	.gitvalidation
