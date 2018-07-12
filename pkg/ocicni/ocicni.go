@@ -47,6 +47,7 @@ type cniNetworkPlugin struct {
 
 type cniNetwork struct {
 	name          string
+	filePath      string
 	NetworkConfig *libcni.NetworkConfigList
 	CNIConfig     *libcni.CNIConfig
 }
@@ -141,8 +142,20 @@ func (plugin *cniNetworkPlugin) monitorConfDir(start *sync.WaitGroup) {
 		select {
 		case event := <-plugin.watcher.Events:
 			logrus.Warningf("CNI monitoring event %v", event)
-			if event.Op&fsnotify.Create != fsnotify.Create &&
-				event.Op&fsnotify.Write != fsnotify.Write {
+
+			var defaultDeleted bool
+			createWrite := (event.Op&fsnotify.Create == fsnotify.Create ||
+				event.Op&fsnotify.Write == fsnotify.Write)
+			if event.Op&fsnotify.Remove == fsnotify.Remove {
+				// Care about the event if the default network
+				// was just deleted
+				defNet := plugin.getDefaultNetwork()
+				if defNet != nil && event.Name == defNet.filePath {
+					defaultDeleted = true
+				}
+
+			}
+			if !createWrite && !defaultDeleted {
 				continue
 			}
 
@@ -233,11 +246,8 @@ func (plugin *cniNetworkPlugin) Shutdown() error {
 
 func loadNetworks(exec cniinvoke.Exec, confDir string, binDirs []string) (map[string]*cniNetwork, string, error) {
 	files, err := libcni.ConfFiles(confDir, []string{".conf", ".conflist", ".json"})
-	switch {
-	case err != nil:
+	if err != nil {
 		return nil, "", err
-	case len(files) == 0:
-		return nil, "", errMissingDefaultNetwork
 	}
 
 	networks := make(map[string]*cniNetwork)
@@ -280,6 +290,7 @@ func loadNetworks(exec cniinvoke.Exec, confDir string, binDirs []string) (map[st
 
 		networks[confList.Name] = &cniNetwork{
 			name:          confList.Name,
+			filePath:      confFile,
 			NetworkConfig: confList,
 			CNIConfig:     libcni.NewCNIConfig(binDirs, exec),
 		}
@@ -287,10 +298,6 @@ func loadNetworks(exec cniinvoke.Exec, confDir string, binDirs []string) (map[st
 		if defaultNetName == "" {
 			defaultNetName = confList.Name
 		}
-	}
-
-	if len(networks) == 0 {
-		return nil, "", fmt.Errorf("No valid networks found in %s", confDir)
 	}
 
 	return networks, defaultNetName, nil
