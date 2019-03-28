@@ -1,6 +1,7 @@
 package ocicni
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -90,7 +91,7 @@ func getCNICommand(env []string) (string, error) {
 	return "", fmt.Errorf("failed to find CNI_COMMAND")
 }
 
-func (f *fakeExec) ExecPlugin(pluginPath string, stdinData []byte, environ []string) ([]byte, error) {
+func (f *fakeExec) ExecPlugin(ctx context.Context, pluginPath string, stdinData []byte, environ []string) ([]byte, error) {
 	cmd, err := getCNICommand(environ)
 	Expect(err).NotTo(HaveOccurred())
 	var index int
