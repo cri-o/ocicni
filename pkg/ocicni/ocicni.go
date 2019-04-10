@@ -457,33 +457,36 @@ func (plugin *cniNetworkPlugin) GetPodNetworkStatus(podNetwork PodNetwork) ([]cn
 
 	results := make([]cnitypes.Result, 0)
 	if err := plugin.forEachNetwork(&podNetwork, func(network *cniNetwork, ifName string, podNetwork *PodNetwork, runtimeConfig RuntimeConfig) error {
-		version := "4"
-		ip, mac, err := getContainerDetails(plugin.nsManager, podNetwork.NetNS, ifName, "-4")
-		if err != nil {
-			ip, mac, err = getContainerDetails(plugin.nsManager, podNetwork.NetNS, ifName, "-6")
-			if err != nil {
-				return err
+		var intf *cnicurrent.Interface
+		ips := make([]*cnicurrent.IPConfig, 0)
+
+		for _, version := range []string{"4", "6"} {
+			ip, mac, err := getContainerDetails(plugin.nsManager, podNetwork.NetNS, ifName, "-"+version)
+			if err == nil {
+				if intf == nil {
+					intf = &cnicurrent.Interface{
+						Name:    ifName,
+						Mac:     mac.String(),
+						Sandbox: podNetwork.NetNS,
+					}
+				}
+				ips = append(ips, &cnicurrent.IPConfig{
+					Version:   version,
+					Interface: cnicurrent.Int(0),
+					Address:   *ip,
+				})
 			}
-			version = "6"
+		}
+
+		if intf == nil || len(ips) == 0 {
+			return fmt.Errorf("failed to get network information")
 		}
 
 		// Until CNI's GET request lands, construct the Result manually
 		results = append(results, &cnicurrent.Result{
 			CNIVersion: "0.3.1",
-			Interfaces: []*cnicurrent.Interface{
-				{
-					Name:    ifName,
-					Mac:     mac.String(),
-					Sandbox: podNetwork.NetNS,
-				},
-			},
-			IPs: []*cnicurrent.IPConfig{
-				{
-					Version:   version,
-					Interface: cnicurrent.Int(0),
-					Address:   *ip,
-				},
-			},
+			Interfaces: []*cnicurrent.Interface{intf},
+			IPs:        ips,
 		})
 		return nil
 	}); err != nil {
