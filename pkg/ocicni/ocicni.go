@@ -260,23 +260,19 @@ func loadNetworks(exec cniinvoke.Exec, confDir string, binDirs []string) (map[st
 		if strings.HasSuffix(confFile, ".conflist") {
 			confList, err = libcni.ConfListFromFile(confFile)
 			if err != nil {
-				logrus.Warningf("Error loading CNI config list file %s: %v", confFile, err)
-				continue
+				return nil, "", fmt.Errorf("Error loading CNI config list file %s: %v", confFile, err)
 			}
 		} else {
 			conf, err := libcni.ConfFromFile(confFile)
 			if err != nil {
-				logrus.Warningf("Error loading CNI config file %s: %v", confFile, err)
-				continue
+				return nil, "", fmt.Errorf("Error loading CNI config file %s: %v", confFile, err)
 			}
 			if conf.Network.Type == "" {
-				logrus.Warningf("Error loading CNI config file %s: no 'type'; perhaps this is a .conflist?", confFile)
-				continue
+				return nil, "", fmt.Errorf("Error loading CNI config file %s: no 'type'; perhaps this is a .conflist?", confFile)
 			}
 			confList, err = libcni.ConfListFromConf(conf)
 			if err != nil {
-				logrus.Warningf("Error converting CNI config file %s to list: %v", confFile, err)
-				continue
+				return nil, "", fmt.Errorf("Error converting CNI config file %s to list: %v", confFile, err)
 			}
 		}
 		if len(confList.Plugins) == 0 {
