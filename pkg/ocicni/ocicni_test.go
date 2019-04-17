@@ -251,11 +251,11 @@ var _ = Describe("ocicni operations", func() {
 		ocicni.Shutdown()
 	})
 
-	It("finds an the asciibetically first network configuration as default if given no default network name", func() {
+	It("finds an ASCIIbetically first network configuration as default if given no default network name", func() {
 		ocicni, err := InitCNI("", tmpDir, "/opt/cni/bin")
 		Expect(err).NotTo(HaveOccurred())
 
-		_, _, err = writeConfig(tmpDir, "10-test.conf", "test", "myplugin", "0.3.1")
+		_, _, err = writeConfig(tmpDir, "15-test.conf", "test", "myplugin", "0.3.1")
 		Expect(err).NotTo(HaveOccurred())
 		_, _, err = writeConfig(tmpDir, "5-notdefault.conf", "notdefault", "myplugin", "0.3.1")
 		Expect(err).NotTo(HaveOccurred())
@@ -265,6 +265,16 @@ var _ = Describe("ocicni operations", func() {
 		tmp := ocicni.(*cniNetworkPlugin)
 		net := tmp.getDefaultNetwork()
 		Expect(net.name).To(Equal("test"))
+		Expect(len(net.NetworkConfig.Plugins)).To(BeNumerically(">", 0))
+		Expect(net.NetworkConfig.Plugins[0].Network.Type).To(Equal("myplugin"))
+
+		_, _, err = writeConfig(tmpDir, "10-abc.conf", "newdefault", "myplugin", "0.3.1")
+		Expect(err).NotTo(HaveOccurred())
+
+		Consistently(ocicni.Status, 5).Should(Succeed())
+
+		net = tmp.getDefaultNetwork()
+		Expect(net.name).To(Equal("newdefault"))
 		Expect(len(net.NetworkConfig.Plugins)).To(BeNumerically(">", 0))
 		Expect(net.NetworkConfig.Plugins[0].Network.Type).To(Equal("myplugin"))
 
