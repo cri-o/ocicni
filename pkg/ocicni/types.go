@@ -31,6 +31,10 @@ type RuntimeConfig struct {
 	// with the hostlocal IP allocator. If left unset, an IP will be
 	// dynamically allocated.
 	IP string
+	// PortMappings is the port mapping of the sandbox.
+	PortMappings []PortMapping
+	// Bandwidth is the bandwidth limiting of the pod
+	Bandwidth *BandwidthConfig
 }
 
 type BandwidthConfig struct {
@@ -53,10 +57,6 @@ type PodNetwork struct {
 	ID string
 	// NetNS is the network namespace path of the sandbox.
 	NetNS string
-	// PortMappings is the port mapping of the sandbox.
-	PortMappings []PortMapping
-	// Bandwidth is the bandwidth limiting of the pod
-	Bandwidth *BandwidthConfig
 
 	// Networks is a list of CNI network names to attach to the sandbox
 	// Leave this list empty to attach the default network to the sandbox
