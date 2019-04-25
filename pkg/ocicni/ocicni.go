@@ -419,7 +419,7 @@ func (plugin *cniNetworkPlugin) SetUpPod(podNetwork PodNetwork) ([]cnitypes.Resu
 	results := make([]cnitypes.Result, 0)
 	if err := plugin.forEachNetwork(&podNetwork, func(network *cniNetwork, ifName string, podNetwork *PodNetwork) error {
 		ip := ""
-		if conf, ok := podNetwork.NetworkConfig[network.name]; ok {
+		if conf, ok := podNetwork.RuntimeConfig[network.name]; ok {
 			ip = conf.IP
 		}
 
@@ -447,7 +447,7 @@ func (plugin *cniNetworkPlugin) TearDownPod(podNetwork PodNetwork) error {
 
 	return plugin.forEachNetwork(&podNetwork, func(network *cniNetwork, ifName string, podNetwork *PodNetwork) error {
 		ip := ""
-		if conf, ok := podNetwork.NetworkConfig[network.name]; ok {
+		if conf, ok := podNetwork.RuntimeConfig[network.name]; ok {
 			ip = conf.IP
 		}
 

@@ -24,8 +24,9 @@ type PortMapping struct {
 	HostIP string `json:"hostIP"`
 }
 
-// NetworkConfig is additional configuration for a single CNI network.
-type NetworkConfig struct {
+// RuntimeConfig is additional configuration for a single CNI network that
+// is pod-specific rather than general to the network.
+type RuntimeConfig struct {
 	// IP is a static IP to be specified in the network. Can only be used
 	// with the hostlocal IP allocator. If left unset, an IP will be
 	// dynamically allocated.
@@ -64,7 +65,7 @@ type PodNetwork struct {
 	// NetworkConfig is configuration specific to a single CNI network.
 	// It is optional, and can be omitted for some or all specified networks
 	// without issue.
-	NetworkConfig map[string]NetworkConfig
+	RuntimeConfig map[string]RuntimeConfig
 }
 
 // CNIPlugin is the interface that needs to be implemented by a plugin
