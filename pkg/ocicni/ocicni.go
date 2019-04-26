@@ -382,7 +382,7 @@ func (plugin *cniNetworkPlugin) Name() string {
 	return CNIPluginName
 }
 
-func (plugin *cniNetworkPlugin) forEachNetwork(podNetwork *PodNetwork, forEachFunc func(*cniNetwork, string, *PodNetwork) error) error {
+func (plugin *cniNetworkPlugin) forEachNetwork(podNetwork *PodNetwork, forEachFunc func(*cniNetwork, string, *PodNetwork, RuntimeConfig) error) error {
 	networks := podNetwork.Networks
 	if len(networks) == 0 {
 		networks = append(networks, plugin.GetDefaultNetworkName())
@@ -395,7 +395,7 @@ func (plugin *cniNetworkPlugin) forEachNetwork(podNetwork *PodNetwork, forEachFu
 			logrus.Errorf(err.Error())
 			return err
 		}
-		if err := forEachFunc(network, ifName, podNetwork); err != nil {
+		if err := forEachFunc(network, ifName, podNetwork, podNetwork.RuntimeConfig[netName]); err != nil {
 			return err
 		}
 	}
@@ -410,20 +410,15 @@ func (plugin *cniNetworkPlugin) SetUpPod(podNetwork PodNetwork) ([]cnitypes.Resu
 	plugin.podLock(podNetwork).Lock()
 	defer plugin.podUnlock(podNetwork)
 
-	_, err := plugin.loNetwork.addToNetwork(plugin.cacheDir, &podNetwork, "lo", "")
+	_, err := plugin.loNetwork.addToNetwork(plugin.cacheDir, &podNetwork, "lo", RuntimeConfig{})
 	if err != nil {
 		logrus.Errorf("Error while adding to cni lo network: %s", err)
 		return nil, err
 	}
 
 	results := make([]cnitypes.Result, 0)
-	if err := plugin.forEachNetwork(&podNetwork, func(network *cniNetwork, ifName string, podNetwork *PodNetwork) error {
-		ip := ""
-		if conf, ok := podNetwork.NetworkConfig[network.name]; ok {
-			ip = conf.IP
-		}
-
-		result, err := network.addToNetwork(plugin.cacheDir, podNetwork, ifName, ip)
+	if err := plugin.forEachNetwork(&podNetwork, func(network *cniNetwork, ifName string, podNetwork *PodNetwork, runtimeConfig RuntimeConfig) error {
+		result, err := network.addToNetwork(plugin.cacheDir, podNetwork, ifName, runtimeConfig)
 		if err != nil {
 			logrus.Errorf("Error while adding pod to CNI network %q: %s", network.name, err)
 			return err
@@ -445,13 +440,8 @@ func (plugin *cniNetworkPlugin) TearDownPod(podNetwork PodNetwork) error {
 	plugin.podLock(podNetwork).Lock()
 	defer plugin.podUnlock(podNetwork)
 
-	return plugin.forEachNetwork(&podNetwork, func(network *cniNetwork, ifName string, podNetwork *PodNetwork) error {
-		ip := ""
-		if conf, ok := podNetwork.NetworkConfig[network.name]; ok {
-			ip = conf.IP
-		}
-
-		if err := network.deleteFromNetwork(plugin.cacheDir, podNetwork, ifName, ip); err != nil {
+	return plugin.forEachNetwork(&podNetwork, func(network *cniNetwork, ifName string, podNetwork *PodNetwork, runtimeConfig RuntimeConfig) error {
+		if err := network.deleteFromNetwork(plugin.cacheDir, podNetwork, ifName, runtimeConfig); err != nil {
 			logrus.Errorf("Error while removing pod from CNI network %q: %s", network.name, err)
 			return err
 		}
@@ -466,7 +456,7 @@ func (plugin *cniNetworkPlugin) GetPodNetworkStatus(podNetwork PodNetwork) ([]cn
 	defer plugin.podUnlock(podNetwork)
 
 	results := make([]cnitypes.Result, 0)
-	if err := plugin.forEachNetwork(&podNetwork, func(network *cniNetwork, ifName string, podNetwork *PodNetwork) error {
+	if err := plugin.forEachNetwork(&podNetwork, func(network *cniNetwork, ifName string, podNetwork *PodNetwork, runtimeConfig RuntimeConfig) error {
 		version := "4"
 		ip, mac, err := getContainerDetails(plugin.nsManager, podNetwork.NetNS, ifName, "-4")
 		if err != nil {
@@ -503,8 +493,8 @@ func (plugin *cniNetworkPlugin) GetPodNetworkStatus(podNetwork PodNetwork) ([]cn
 	return results, nil
 }
 
-func (network *cniNetwork) addToNetwork(cacheDir string, podNetwork *PodNetwork, ifName, ip string) (cnitypes.Result, error) {
-	rt, err := buildCNIRuntimeConf(cacheDir, podNetwork, ifName, ip)
+func (network *cniNetwork) addToNetwork(cacheDir string, podNetwork *PodNetwork, ifName string, runtimeConfig RuntimeConfig) (cnitypes.Result, error) {
+	rt, err := buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
 	if err != nil {
 		logrus.Errorf("Error adding network: %v", err)
 		return nil, err
@@ -521,8 +511,8 @@ func (network *cniNetwork) addToNetwork(cacheDir string, podNetwork *PodNetwork,
 	return res, nil
 }
 
-func (network *cniNetwork) deleteFromNetwork(cacheDir string, podNetwork *PodNetwork, ifName, ip string) error {
-	rt, err := buildCNIRuntimeConf(cacheDir, podNetwork, ifName, ip)
+func (network *cniNetwork) deleteFromNetwork(cacheDir string, podNetwork *PodNetwork, ifName string, runtimeConfig RuntimeConfig) error {
+	rt, err := buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
 	if err != nil {
 		logrus.Errorf("Error deleting network: %v", err)
 		return err
@@ -538,7 +528,7 @@ func (network *cniNetwork) deleteFromNetwork(cacheDir string, podNetwork *PodNet
 	return nil
 }
 
-func buildCNIRuntimeConf(cacheDir string, podNetwork *PodNetwork, ifName, ip string) (*libcni.RuntimeConf, error) {
+func buildCNIRuntimeConf(cacheDir string, podNetwork *PodNetwork, ifName string, runtimeConfig RuntimeConfig) (*libcni.RuntimeConf, error) {
 	logrus.Infof("Got pod network %+v", podNetwork)
 
 	rt := &libcni.RuntimeConf{
@@ -556,6 +546,7 @@ func buildCNIRuntimeConf(cacheDir string, podNetwork *PodNetwork, ifName, ip str
 	}
 
 	// Add requested static IP to CNI_ARGS
+	ip := runtimeConfig.IP
 	if ip != "" {
 		if tstIP := net.ParseIP(ip); tstIP == nil {
 			return nil, fmt.Errorf("unable to parse IP address %q", ip)
@@ -563,16 +554,16 @@ func buildCNIRuntimeConf(cacheDir string, podNetwork *PodNetwork, ifName, ip str
 		rt.Args = append(rt.Args, [2]string{"IP", ip})
 	}
 
-	if len(podNetwork.PortMappings) != 0 {
-		rt.CapabilityArgs["portMappings"] = podNetwork.PortMappings
+	if len(runtimeConfig.PortMappings) != 0 {
+		rt.CapabilityArgs["portMappings"] = runtimeConfig.PortMappings
 	}
 
-	if podNetwork.Bandwidth != nil {
+	if runtimeConfig.Bandwidth != nil {
 		rt.CapabilityArgs["bandwidth"] = map[string]uint64{
-			"ingressRate":  podNetwork.Bandwidth.IngressRate,
-			"ingressBurst": podNetwork.Bandwidth.IngressBurst,
-			"egressRate":   podNetwork.Bandwidth.EgressRate,
-			"egressBurst":  podNetwork.Bandwidth.EgressBurst,
+			"ingressRate":  runtimeConfig.Bandwidth.IngressRate,
+			"ingressBurst": runtimeConfig.Bandwidth.IngressBurst,
+			"egressRate":   runtimeConfig.Bandwidth.EgressRate,
+			"egressBurst":  runtimeConfig.Bandwidth.EgressBurst,
 		}
 	}
 
