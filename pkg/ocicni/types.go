@@ -24,6 +24,19 @@ type PortMapping struct {
 	HostIP string `json:"hostIP"`
 }
 
+// IpRange maps to the standard CNI ipRanges Capability
+// see: https://github.com/containernetworking/cni/blob/master/CONVENTIONS.md
+type IpRange struct {
+	// Subnet is the whole CIDR
+	Subnet string `json:"subnet"`
+	// RangeStart is the first available IP in subnet
+	RangeStart string `json:"rangeStart,omitempty"`
+	// RangeEnd is the last available IP in subnet
+	RangeEnd string `json:"rangeEnd,omitempty"`
+	// Gateway is the gateway of subnet
+	Gateway string `json:"gateway,omitempty"`
+}
+
 // RuntimeConfig is additional configuration for a single CNI network that
 // is pod-specific rather than general to the network.
 type RuntimeConfig struct {
@@ -35,8 +48,12 @@ type RuntimeConfig struct {
 	PortMappings []PortMapping
 	// Bandwidth is the bandwidth limiting of the pod
 	Bandwidth *BandwidthConfig
+	// IpRanges is the ip range gather which is used for address allocation
+	IpRanges [][]IpRange
 }
 
+// BandwidthConfig maps to the standard CNI bandwidth Capability
+// see: https://github.com/containernetworking/cni/blob/master/CONVENTIONS.md
 type BandwidthConfig struct {
 	// IngressRate is a limit for incoming traffic in bps
 	IngressRate  uint64
