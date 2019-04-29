@@ -554,10 +554,12 @@ func buildCNIRuntimeConf(cacheDir string, podNetwork *PodNetwork, ifName string,
 		rt.Args = append(rt.Args, [2]string{"IP", ip})
 	}
 
+	// Set PortMappings in Capabilities
 	if len(runtimeConfig.PortMappings) != 0 {
 		rt.CapabilityArgs["portMappings"] = runtimeConfig.PortMappings
 	}
 
+	// Set Bandwidth in Capabilities
 	if runtimeConfig.Bandwidth != nil {
 		rt.CapabilityArgs["bandwidth"] = map[string]uint64{
 			"ingressRate":  runtimeConfig.Bandwidth.IngressRate,
@@ -565,6 +567,11 @@ func buildCNIRuntimeConf(cacheDir string, podNetwork *PodNetwork, ifName string,
 			"egressRate":   runtimeConfig.Bandwidth.EgressRate,
 			"egressBurst":  runtimeConfig.Bandwidth.EgressBurst,
 		}
+	}
+
+	// Set IpRanges in Capabilities
+	if len(runtimeConfig.IpRanges) > 0 {
+		rt.CapabilityArgs["ipRanges"] = runtimeConfig.IpRanges
 	}
 
 	return rt, nil

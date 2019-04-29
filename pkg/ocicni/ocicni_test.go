@@ -15,6 +15,7 @@ import (
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/containernetworking/cni/pkg/version"
 
+	"github.com/containernetworking/cni/libcni"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -298,6 +299,97 @@ var _ = Describe("ocicni operations", func() {
 		net, ok := netMap["network2"]
 		Expect(ok).To(BeTrue())
 		Expect(net.NetworkConfig.Plugins[0].Network.Type).To(Equal("myplugin2"))
+	})
+
+	It("build different runtime configs", func() {
+		cacheDir := "empty"
+		ifName := "eth0"
+		podNetwork := &PodNetwork{}
+
+		var (
+			runtimeConfig RuntimeConfig
+			rt            *libcni.RuntimeConf
+			err           error
+		)
+
+		// empty runtimeConfig
+		_, err = buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
+		Expect(err).NotTo(HaveOccurred())
+
+		// runtimeConfig with invalid IP
+		runtimeConfig = RuntimeConfig{IP: "172.16"}
+		_, err = buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
+		Expect(err).To(HaveOccurred())
+
+		// runtimeConfig with valid IP
+		runtimeConfig = RuntimeConfig{IP: "172.16.0.1"}
+		rt, err = buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(rt.Args)).To(Equal(5))
+		Expect(rt.Args[4][1]).To(Equal("172.16.0.1"))
+
+		// runtimeConfig with portMappings is nil
+		runtimeConfig = RuntimeConfig{PortMappings: nil}
+		_, err = buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
+		Expect(err).NotTo(HaveOccurred())
+
+		// runtimeConfig with valid portMappings
+		runtimeConfig = RuntimeConfig{PortMappings: []PortMapping{{
+			HostPort:      100,
+			ContainerPort: 50,
+			Protocol:      "tcp",
+			HostIP:        "192.168.0.1",
+		}}}
+		rt, err = buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
+		Expect(err).NotTo(HaveOccurred())
+		pm, ok := rt.CapabilityArgs["portMappings"].([]PortMapping)
+		Expect(ok).To(Equal(true))
+		Expect(len(pm)).To(Equal(1))
+		Expect(pm[0].HostPort).To(Equal(int32(100)))
+		Expect(pm[0].ContainerPort).To(Equal(int32(50)))
+		Expect(pm[0].Protocol).To(Equal("tcp"))
+		Expect(pm[0].HostIP).To(Equal("192.168.0.1"))
+
+		// runtimeConfig with bandwidth is nil
+		runtimeConfig = RuntimeConfig{Bandwidth: nil}
+		_, err = buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
+		Expect(err).NotTo(HaveOccurred())
+
+		// runtimeConfig with valid bandwidth
+		runtimeConfig = RuntimeConfig{Bandwidth: &BandwidthConfig{
+			IngressRate:  1,
+			IngressBurst: 2,
+			EgressRate:   3,
+			EgressBurst:  4,
+		}}
+		rt, err = buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
+		Expect(err).NotTo(HaveOccurred())
+		bw, ok := rt.CapabilityArgs["bandwidth"].(map[string]uint64)
+		Expect(ok).To(Equal(true))
+		Expect(bw["ingressRate"]).To(Equal(uint64(1)))
+		Expect(bw["ingressBurst"]).To(Equal(uint64(2)))
+		Expect(bw["egressRate"]).To(Equal(uint64(3)))
+		Expect(bw["egressBurst"]).To(Equal(uint64(4)))
+
+		// runtimeConfig with ipRanges is empty
+		runtimeConfig = RuntimeConfig{IpRanges: [][]IpRange{}}
+		_, err = buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
+		Expect(err).NotTo(HaveOccurred())
+
+		// runtimeConfig with valid ipRanges
+		runtimeConfig = RuntimeConfig{IpRanges: [][]IpRange{{IpRange{
+			Subnet:     "192.168.0.0/24",
+			RangeStart: "192.168.0.100",
+			RangeEnd:   "192.168.0.200",
+			Gateway:    "192.168.0.254",
+		}}}}
+		rt, err = buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
+		Expect(err).NotTo(HaveOccurred())
+		ir, ok := rt.CapabilityArgs["ipRanges"].([][]IpRange)
+		Expect(ok).To(Equal(true))
+		Expect(len(ir)).To(Equal(1))
+		Expect(len(ir[0])).To(Equal(1))
+		Expect(ir[0][0].Gateway).To(Equal("192.168.0.254"))
 	})
 
 	It("sets up and tears down a pod using the default network", func() {
