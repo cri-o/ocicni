@@ -509,22 +509,24 @@ func (network *cniNetwork) checkNetwork(cacheDir string, podNetwork *PodNetwork,
 
 	var result cnitypes.Result
 
-	// When CNIVersion supports Check, us it.  Otherwise fall back on what was done initially.
+	// When CNIVersion supports Check, use it.  Otherwise fall back on what was done initially.
 	if gtet {
 		err = cninet.CheckNetworkList(context.Background(), netconf, rt)
+		logrus.Infof("Checking CNI network %s (config version=%v)", netconf.Name, netconf.CNIVersion)
 		if err != nil {
 			logrus.Errorf("Error checking network: %v", err)
 			return nil, err
 		}
 		result, err = cninet.GetNetworkListCachedResult(netconf, rt)
 		if err != nil {
-			logrus.Errorf("Error gettomg cached result: %v", err)
+			logrus.Errorf("Error GetNetworkListCachedResult: %v", err)
 			return nil, err
 		}
 
 		return result, nil
 	} else {
 
+		logrus.Infof("Checking CNI network %s (config version=%v) nsManager=%v", netconf.Name, netconf.CNIVersion, nsManager)
 		version := "4"
 		ip, mac, err := getContainerDetails(nsManager, podNetwork.NetNS, ifName, "-4")
 		if err != nil {
