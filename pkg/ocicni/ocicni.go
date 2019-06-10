@@ -517,43 +517,44 @@ func (network *cniNetwork) checkNetwork(cacheDir string, podNetwork *PodNetwork,
 			logrus.Errorf("Error checking network: %v", err)
 			return nil, err
 		}
-		result, err = cninet.GetNetworkListCachedResult(netconf, rt)
+	}
+
+	result, err = cninet.GetNetworkListCachedResult(netconf, rt)
+	if err != nil {
+		logrus.Errorf("Error GetNetworkListCachedResult: %v", err)
+		return nil, err
+	} else if result != nil {
+		return result, nil
+	}
+
+	// result doesn't exist, create one
+	logrus.Infof("Checking CNI network %s (config version=%v) nsManager=%v", netconf.Name, netconf.CNIVersion, nsManager)
+	version := "4"
+	ip, mac, err := getContainerDetails(nsManager, podNetwork.NetNS, ifName, "-4")
+	if err != nil {
+		ip, mac, err = getContainerDetails(nsManager, podNetwork.NetNS, ifName, "-6")
 		if err != nil {
-			logrus.Errorf("Error GetNetworkListCachedResult: %v", err)
 			return nil, err
 		}
+		version = "6"
+	}
 
-		return result, nil
-	} else {
-
-		logrus.Infof("Checking CNI network %s (config version=%v) nsManager=%v", netconf.Name, netconf.CNIVersion, nsManager)
-		version := "4"
-		ip, mac, err := getContainerDetails(nsManager, podNetwork.NetNS, ifName, "-4")
-		if err != nil {
-			ip, mac, err = getContainerDetails(nsManager, podNetwork.NetNS, ifName, "-6")
-			if err != nil {
-				return nil, err
-			}
-			version = "6"
-		}
-
-		result = &cnicurrent.Result{
-			CNIVersion: "0.3.1",
-			Interfaces: []*cnicurrent.Interface{
-				{
-					Name:    ifName,
-					Mac:     mac.String(),
-					Sandbox: podNetwork.NetNS,
-				},
+	result = &cnicurrent.Result{
+		CNIVersion: netconf.CNIVersion,
+		Interfaces: []*cnicurrent.Interface{
+			{
+				Name:    ifName,
+				Mac:     mac.String(),
+				Sandbox: podNetwork.NetNS,
 			},
-			IPs: []*cnicurrent.IPConfig{
-				{
-					Version:   version,
-					Interface: cnicurrent.Int(0),
-					Address:   *ip,
-				},
+		},
+		IPs: []*cnicurrent.IPConfig{
+			{
+				Version:   version,
+				Interface: cnicurrent.Int(0),
+				Address:   *ip,
 			},
-		}
+		},
 	}
 
 	return result, nil
