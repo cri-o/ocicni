@@ -190,7 +190,7 @@ var _ = Describe("ocicni operations", func() {
 		// Writing a config that doesn't match the default network
 		_, _, err = writeConfig(tmpDir, "5-notdefault.conf", "notdefault", "myplugin")
 		Expect(err).NotTo(HaveOccurred())
-		Consistently(ocicni.Status, 5).Should(HaveOccurred())
+		Eventually(ocicni.Status, 5).Should(HaveOccurred())
 
 		_, _, err = writeConfig(tmpDir, "10-test.conf", "test", "myplugin")
 		Expect(err).NotTo(HaveOccurred())
