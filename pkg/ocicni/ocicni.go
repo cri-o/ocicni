@@ -457,34 +457,14 @@ func (plugin *cniNetworkPlugin) GetPodNetworkStatus(podNetwork PodNetwork) ([]cn
 
 	results := make([]cnitypes.Result, 0)
 	if err := plugin.forEachNetwork(&podNetwork, func(network *cniNetwork, ifName string, podNetwork *PodNetwork, runtimeConfig RuntimeConfig) error {
-		version := "4"
-		ip, mac, err := getContainerDetails(plugin.nsManager, podNetwork.NetNS, ifName, "-4")
+		result, err := network.checkNetwork(plugin.cacheDir, podNetwork, ifName, runtimeConfig, plugin.nsManager)
 		if err != nil {
-			ip, mac, err = getContainerDetails(plugin.nsManager, podNetwork.NetNS, ifName, "-6")
-			if err != nil {
-				return err
-			}
-			version = "6"
+			logrus.Errorf("Error while checking pod to CNI network %q: %s", network.name, err)
+			return err
 		}
-
-		// Until CNI's GET request lands, construct the Result manually
-		results = append(results, &cnicurrent.Result{
-			CNIVersion: "0.3.1",
-			Interfaces: []*cnicurrent.Interface{
-				{
-					Name:    ifName,
-					Mac:     mac.String(),
-					Sandbox: podNetwork.NetNS,
-				},
-			},
-			IPs: []*cnicurrent.IPConfig{
-				{
-					Version:   version,
-					Interface: cnicurrent.Int(0),
-					Address:   *ip,
-				},
-			},
-		})
+		if result != nil {
+			results = append(results, result)
+		}
 		return nil
 	}); err != nil {
 		return nil, err
@@ -509,6 +489,75 @@ func (network *cniNetwork) addToNetwork(cacheDir string, podNetwork *PodNetwork,
 	}
 
 	return res, nil
+}
+
+func (network *cniNetwork) checkNetwork(cacheDir string, podNetwork *PodNetwork, ifName string, runtimeConfig RuntimeConfig, nsManager *nsManager) (cnitypes.Result, error) {
+
+	rt, err := buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
+	if err != nil {
+		logrus.Errorf("Error checking network: %v", err)
+		return nil, err
+	}
+
+	netconf, cninet := network.NetworkConfig, network.CNIConfig
+	logrus.Infof("About to check CNI network %s (type=%v)", netconf.Name, netconf.Plugins[0].Network.Type)
+
+	gtet, err := cniversion.GreaterThanOrEqualTo(netconf.CNIVersion, "0.4.0")
+	if err != nil {
+		return nil, err
+	}
+
+	var result cnitypes.Result
+
+	// When CNIVersion supports Check, use it.  Otherwise fall back on what was done initially.
+	if gtet {
+		err = cninet.CheckNetworkList(context.Background(), netconf, rt)
+		logrus.Infof("Checking CNI network %s (config version=%v)", netconf.Name, netconf.CNIVersion)
+		if err != nil {
+			logrus.Errorf("Error checking network: %v", err)
+			return nil, err
+		}
+	}
+
+	result, err = cninet.GetNetworkListCachedResult(netconf, rt)
+	if err != nil {
+		logrus.Errorf("Error GetNetworkListCachedResult: %v", err)
+		return nil, err
+	} else if result != nil {
+		return result, nil
+	}
+
+	// result doesn't exist, create one
+	logrus.Infof("Checking CNI network %s (config version=%v) nsManager=%v", netconf.Name, netconf.CNIVersion, nsManager)
+	version := "4"
+	ip, mac, err := getContainerDetails(nsManager, podNetwork.NetNS, ifName, "-4")
+	if err != nil {
+		ip, mac, err = getContainerDetails(nsManager, podNetwork.NetNS, ifName, "-6")
+		if err != nil {
+			return nil, err
+		}
+		version = "6"
+	}
+
+	result = &cnicurrent.Result{
+		CNIVersion: netconf.CNIVersion,
+		Interfaces: []*cnicurrent.Interface{
+			{
+				Name:    ifName,
+				Mac:     mac.String(),
+				Sandbox: podNetwork.NetNS,
+			},
+		},
+		IPs: []*cnicurrent.IPConfig{
+			{
+				Version:   version,
+				Interface: cnicurrent.Int(0),
+				Address:   *ip,
+			},
+		},
+	}
+
+	return result, nil
 }
 
 func (network *cniNetwork) deleteFromNetwork(cacheDir string, podNetwork *PodNetwork, ifName string, runtimeConfig RuntimeConfig) error {
