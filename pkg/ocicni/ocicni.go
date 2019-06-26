@@ -335,9 +335,7 @@ func (plugin *cniNetworkPlugin) syncNetworkConfig() error {
 
 	plugin.Lock()
 	defer plugin.Unlock()
-	if plugin.defaultNetName == "" {
-		plugin.defaultNetName = defaultNetName
-	}
+	plugin.defaultNetName = defaultNetName
 	plugin.networks = networks
 
 	return nil
