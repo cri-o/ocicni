@@ -529,32 +529,37 @@ func (network *cniNetwork) checkNetwork(cacheDir string, podNetwork *PodNetwork,
 
 	// result doesn't exist, create one
 	logrus.Infof("Checking CNI network %s (config version=%v) nsManager=%v", netconf.Name, netconf.CNIVersion, nsManager)
-	version := "4"
-	ip, mac, err := getContainerDetails(nsManager, podNetwork.NetNS, ifName, "-4")
-	if err != nil {
-		ip, mac, err = getContainerDetails(nsManager, podNetwork.NetNS, ifName, "-6")
-		if err != nil {
-			return nil, err
+
+	var cniInterface *cnicurrent.Interface
+	ips := []*cnicurrent.IPConfig{}
+	errs := []error{}
+	for _, version := range []string{"4", "6"} {
+		ip, mac, err := getContainerDetails(nsManager, podNetwork.NetNS, ifName, "-"+version)
+		if err == nil {
+			if cniInterface == nil {
+				cniInterface = &cnicurrent.Interface{
+					Name:    ifName,
+					Mac:     mac.String(),
+					Sandbox: podNetwork.NetNS,
+				}
+			}
+			ips = append(ips, &cnicurrent.IPConfig{
+				Version:   version,
+				Interface: cnicurrent.Int(0),
+				Address:   *ip,
+			})
+		} else {
+			errs = append(errs, err)
 		}
-		version = "6"
+	}
+	if cniInterface == nil || len(ips) == 0 {
+		return nil, fmt.Errorf("neither IPv4 nor IPv6 found when retrieving network status: %v", errs)
 	}
 
 	result = &cnicurrent.Result{
 		CNIVersion: netconf.CNIVersion,
-		Interfaces: []*cnicurrent.Interface{
-			{
-				Name:    ifName,
-				Mac:     mac.String(),
-				Sandbox: podNetwork.NetNS,
-			},
-		},
-		IPs: []*cnicurrent.IPConfig{
-			{
-				Version:   version,
-				Interface: cnicurrent.Int(0),
-				Address:   *ip,
-			},
-		},
+		Interfaces: []*cnicurrent.Interface{cniInterface},
+		IPs:        ips,
 	}
 
 	return result, nil
