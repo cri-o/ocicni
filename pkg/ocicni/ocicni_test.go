@@ -603,7 +603,11 @@ var _ = Describe("ocicni operations", func() {
 
 		resultsStatus, errStatus := ocicni.GetPodNetworkStatus(podNet)
 		Expect(errStatus).NotTo(HaveOccurred())
-		Expect(resultsStatus).NotTo(Equal(nil))
+		Expect(len(resultsStatus)).To(Equal(2))
+		r = resultsStatus[0].(*current.Result)
+		Expect(reflect.DeepEqual(r, expectedResult1)).To(BeTrue())
+		r = resultsStatus[1].(*current.Result)
+		Expect(reflect.DeepEqual(r, expectedResult2)).To(BeTrue())
 
 		err = ocicni.TearDownPod(podNet)
 		Expect(err).NotTo(HaveOccurred())
