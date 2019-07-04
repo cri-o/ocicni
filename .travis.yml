@@ -4,6 +4,8 @@ dist: trusty
 go:
   - 1.9.x
   - 1.10.x
+  - 1.11.x
+  - 1.12.x
 
 env:
   matrix:
@@ -19,7 +21,6 @@ matrix:
 # Ubuntu 14.04 (trusty) doesn't have a new enough util-linux for nsenter,
 # so we have to build it ourselves.
 before_install:
- -
  - wget https://www.kernel.org/pub/linux/utils/util-linux/v2.24/util-linux-2.24.1.tar.gz -qO - | tar -xz -C .
  - sudo apt-get update
  - sudo apt-get install -y libncurses5-dev libslang2-dev gettext zlib1g-dev libselinux1-dev debhelper lsb-release pkg-config po-debconf autoconf automake autopoint libtool

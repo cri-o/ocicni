@@ -1,3 +1,5 @@
+export GO111MODULE=off
+
 GO ?= go
 EPOCH_TEST_COMMIT ?= b0fc980
 PROJECT := github.com/cri-o/ocicni
@@ -47,6 +49,7 @@ ocicnitool: .gopathok $(shell hack/find-godeps.sh $(GOPKGDIR) tools/ocicnitool $
 check: .gopathok
 	@./hack/test-go.sh $(GOPKGDIR)
 	@./hack/verify-gofmt.sh
+	hack/tree_status.sh
 
 clean:
 ifneq ($(GOPATH),)
@@ -69,6 +72,12 @@ install.tools: .install.gitvalidation
 		go get -u github.com/vbatts/git-validation; \
 	fi
 
+vendor:
+	export GO111MODULE=on \
+		$(GO) mod tidy && \
+		$(GO) mod vendor && \
+		$(GO) mod verify
+
 .PHONY: \
 	binaries \
 	clean \
@@ -77,4 +86,5 @@ install.tools: .install.gitvalidation
 	help \
 	check \
 	install.tools \
-	.gitvalidation
+	.gitvalidation \
+	vendor
