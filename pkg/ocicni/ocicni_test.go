@@ -55,7 +55,7 @@ type TestConf struct {
 func (f *fakeExec) addLoopback() {
 	f.plugins = append(f.plugins, &fakePlugin{
 		expectedConf: `{
-        "cniVersion": "0.2.0",
+        "cniVersion": "0.3.1",
         "name": "cni-loopback",
         "type": "loopback"
 }`,
