@@ -562,7 +562,13 @@ func (network *cniNetwork) checkNetwork(cacheDir string, podNetwork *PodNetwork,
 		IPs:        ips,
 	}
 
-	return result, nil
+	// Result must be the same CNIVersion as the CNI config
+	converted, err := result.GetAsVersion(netconf.CNIVersion)
+	if err != nil {
+		return nil, err
+	}
+
+	return converted, nil
 }
 
 func (network *cniNetwork) deleteFromNetwork(cacheDir string, podNetwork *PodNetwork, ifName string, runtimeConfig RuntimeConfig) error {
