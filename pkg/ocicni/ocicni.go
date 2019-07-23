@@ -307,7 +307,7 @@ func loadNetworks(exec cniinvoke.Exec, confDir string, binDirs []string) (map[st
 
 func getLoNetwork(exec cniinvoke.Exec, binDirs []string) *cniNetwork {
 	loConfig, err := libcni.ConfListFromBytes([]byte(`{
-  "cniVersion": "0.2.0",
+  "cniVersion": "0.3.1",
   "name": "cni-loopback",
   "plugins": [{
     "type": "loopback"
