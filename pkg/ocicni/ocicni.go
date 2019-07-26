@@ -579,6 +579,22 @@ func (network *cniNetwork) deleteFromNetwork(cacheDir string, podNetwork *PodNet
 	}
 
 	netconf, cninet := network.NetworkConfig, network.CNIConfig
+
+	// use cache if exist
+        cachedBytes, cachedRuntime, err := cninet.GetNetworkListCachedConfig(network.NetworkConfig, rt)
+	if err == nil {
+		cachedNetworkConfigList, err := libcni.ConfListFromBytes(cachedBytes)
+		if err == nil {
+			logrus.Infof("About to del CNI network %s with cahce (type=%v)", netconf.Name, netconf.Plugins[0].Network.Type)
+			err = cninet.DelNetworkList(context.Background(), cachedNetworkConfigList, cachedRuntime)
+			if err != nil {
+				logrus.Errorf("Error deleting network with cache: %v", err)
+				return err
+			}
+			return nil
+		}
+        }
+
 	logrus.Infof("About to del CNI network %s (type=%v)", netconf.Name, netconf.Plugins[0].Network.Type)
 	err = cninet.DelNetworkList(context.Background(), netconf, rt)
 	if err != nil {
