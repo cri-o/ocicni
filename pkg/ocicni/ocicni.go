@@ -486,7 +486,7 @@ func (network *cniNetwork) validateNetwork() error {
 	netConf, cniNet := network.NetworkConfig, network.CNIConfig
 
 	if _, err := cniNet.ValidateNetworkList(context.TODO(), netConf); err != nil {
-		return fmt.Errorf("cni config %s validation fails : %v", network.name, err)
+		return fmt.Errorf("CNI config %q validation fails: %v", network.name, err)
 	}
 
 	return nil
