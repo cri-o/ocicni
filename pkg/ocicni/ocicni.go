@@ -288,14 +288,23 @@ func loadNetworks(exec cniinvoke.Exec, confDir string, binDirs []string) (map[st
 			confList.Name = path.Base(confFile)
 		}
 
-		logrus.Infof("Found CNI network %s (type=%v) at %s", confList.Name, confList.Plugins[0].Network.Type, confFile)
-
-		networks[confList.Name] = &cniNetwork{
+		cniNet := &cniNetwork{
 			name:          confList.Name,
 			filePath:      confFile,
 			NetworkConfig: confList,
 			CNIConfig:     libcni.NewCNIConfig(binDirs, exec),
 		}
+
+		// Validation on CNI config should be done to pre-check presence
+		// of plugins which are necessary.
+		if err := cniNet.validateNetwork(); err != nil {
+			logrus.Warningf("Error validating CNI config file %s: %v", confFile, err)
+			continue
+		}
+
+		logrus.Infof("Found CNI network %s (type=%v) at %s", confList.Name, confList.Plugins[0].Network.Type, confFile)
+
+		networks[confList.Name] = cniNet
 
 		if defaultNetName == "" {
 			defaultNetName = confList.Name
@@ -471,6 +480,16 @@ func (plugin *cniNetworkPlugin) GetPodNetworkStatus(podNetwork PodNetwork) ([]cn
 	}
 
 	return results, nil
+}
+
+func (network *cniNetwork) validateNetwork() error {
+	netConf, cniNet := network.NetworkConfig, network.CNIConfig
+
+	if _, err := cniNet.ValidateNetworkList(context.TODO(), netConf); err != nil {
+		return fmt.Errorf("CNI config %q validation fails: %v", network.name, err)
+	}
+
+	return nil
 }
 
 func (network *cniNetwork) addToNetwork(cacheDir string, podNetwork *PodNetwork, ifName string, runtimeConfig RuntimeConfig) (cnitypes.Result, error) {
