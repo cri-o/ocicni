@@ -49,9 +49,9 @@ type cniNetworkPlugin struct {
 }
 
 type cniNetwork struct {
-	name          string
-	filePath      string
-	NetworkConfig *libcni.NetworkConfigList
+	name     string
+	filePath string
+	config   *libcni.NetworkConfigList
 }
 
 var errMissingDefaultNetwork = errors.New("Missing CNI default network")
@@ -290,9 +290,9 @@ func loadNetworks(confDir string, cni *libcni.CNIConfig) (map[string]*cniNetwork
 		}
 
 		cniNet := &cniNetwork{
-			name:          confList.Name,
-			filePath:      confFile,
-			NetworkConfig: confList,
+			name:     confList.Name,
+			filePath: confFile,
+			config:   confList,
 		}
 
 		// Validation on CNI config should be done to pre-check presence
@@ -328,8 +328,8 @@ func getLoNetwork() *cniNetwork {
 		panic(err)
 	}
 	loNetwork := &cniNetwork{
-		name:          "lo",
-		NetworkConfig: loConfig,
+		name:   "lo",
+		config: loConfig,
 	}
 
 	return loNetwork
@@ -482,7 +482,7 @@ func (plugin *cniNetworkPlugin) GetPodNetworkStatus(podNetwork PodNetwork) ([]cn
 }
 
 func (network *cniNetwork) validateNetwork(cni *libcni.CNIConfig) error {
-	if _, err := cni.ValidateNetworkList(context.TODO(), network.NetworkConfig); err != nil {
+	if _, err := cni.ValidateNetworkList(context.TODO(), network.config); err != nil {
 		return fmt.Errorf("CNI config %q validation fails: %v", network.name, err)
 	}
 
@@ -496,8 +496,8 @@ func (network *cniNetwork) addToNetwork(cacheDir string, podNetwork *PodNetwork,
 		return nil, err
 	}
 
-	logrus.Infof("About to add CNI network %s (type=%v)", network.name, network.NetworkConfig.Plugins[0].Network.Type)
-	res, err := cni.AddNetworkList(context.Background(), network.NetworkConfig, rt)
+	logrus.Infof("About to add CNI network %s (type=%v)", network.name, network.config.Plugins[0].Network.Type)
+	res, err := cni.AddNetworkList(context.Background(), network.config, rt)
 	if err != nil {
 		logrus.Errorf("Error adding network: %v", err)
 		return nil, err
@@ -513,10 +513,9 @@ func (network *cniNetwork) checkNetwork(cacheDir string, podNetwork *PodNetwork,
 		return nil, err
 	}
 
-	netconf := network.NetworkConfig
-	logrus.Infof("About to check CNI network %s (type=%v)", network.name, netconf.Plugins[0].Network.Type)
+	logrus.Infof("About to check CNI network %s (type=%v)", network.name, network.config.Plugins[0].Network.Type)
 
-	gtet, err := cniversion.GreaterThanOrEqualTo(netconf.CNIVersion, "0.4.0")
+	gtet, err := cniversion.GreaterThanOrEqualTo(network.config.CNIVersion, "0.4.0")
 	if err != nil {
 		return nil, err
 	}
@@ -525,15 +524,15 @@ func (network *cniNetwork) checkNetwork(cacheDir string, podNetwork *PodNetwork,
 
 	// When CNIVersion supports Check, use it.  Otherwise fall back on what was done initially.
 	if gtet {
-		err = cni.CheckNetworkList(context.Background(), netconf, rt)
-		logrus.Infof("Checking CNI network %s (config version=%v)", network.name, netconf.CNIVersion)
+		err = cni.CheckNetworkList(context.Background(), network.config, rt)
+		logrus.Infof("Checking CNI network %s (config version=%v)", network.name, network.config.CNIVersion)
 		if err != nil {
 			logrus.Errorf("Error checking network: %v", err)
 			return nil, err
 		}
 	}
 
-	result, err = cni.GetNetworkListCachedResult(netconf, rt)
+	result, err = cni.GetNetworkListCachedResult(network.config, rt)
 	if err != nil {
 		logrus.Errorf("Error GetNetworkListCachedResult: %v", err)
 		return nil, err
@@ -542,7 +541,7 @@ func (network *cniNetwork) checkNetwork(cacheDir string, podNetwork *PodNetwork,
 	}
 
 	// result doesn't exist, create one
-	logrus.Infof("Checking CNI network %s (config version=%v) nsManager=%v", network.name, netconf.CNIVersion, nsManager)
+	logrus.Infof("Checking CNI network %s (config version=%v) nsManager=%v", network.name, network.config.CNIVersion, nsManager)
 
 	var cniInterface *cnicurrent.Interface
 	ips := []*cnicurrent.IPConfig{}
@@ -571,13 +570,13 @@ func (network *cniNetwork) checkNetwork(cacheDir string, podNetwork *PodNetwork,
 	}
 
 	result = &cnicurrent.Result{
-		CNIVersion: netconf.CNIVersion,
+		CNIVersion: network.config.CNIVersion,
 		Interfaces: []*cnicurrent.Interface{cniInterface},
 		IPs:        ips,
 	}
 
 	// Result must be the same CNIVersion as the CNI config
-	converted, err := result.GetAsVersion(netconf.CNIVersion)
+	converted, err := result.GetAsVersion(network.config.CNIVersion)
 	if err != nil {
 		return nil, err
 	}
@@ -592,8 +591,8 @@ func (network *cniNetwork) deleteFromNetwork(cacheDir string, podNetwork *PodNet
 		return err
 	}
 
-	logrus.Infof("About to del CNI network %s (type=%v)", network.name, network.NetworkConfig.Plugins[0].Network.Type)
-	err = cni.DelNetworkList(context.Background(), network.NetworkConfig, rt)
+	logrus.Infof("About to del CNI network %s (type=%v)", network.name, network.config.Plugins[0].Network.Type)
+	err = cni.DelNetworkList(context.Background(), network.config, rt)
 	if err != nil {
 		logrus.Errorf("Error deleting network: %v", err)
 		return err

@@ -196,8 +196,8 @@ var _ = Describe("ocicni operations", func() {
 		tmp := ocicni.(*cniNetworkPlugin)
 		net := tmp.getDefaultNetwork()
 		Expect(net.name).To(Equal("test"))
-		Expect(len(net.NetworkConfig.Plugins)).To(BeNumerically(">", 0))
-		Expect(net.NetworkConfig.Plugins[0].Network.Type).To(Equal("myplugin"))
+		Expect(len(net.config.Plugins)).To(BeNumerically(">", 0))
+		Expect(net.config.Plugins[0].Network.Type).To(Equal("myplugin"))
 
 		ocicni.Shutdown()
 	})
@@ -218,8 +218,8 @@ var _ = Describe("ocicni operations", func() {
 		tmp := ocicni.(*cniNetworkPlugin)
 		net := tmp.getDefaultNetwork()
 		Expect(net.name).To(Equal("test"))
-		Expect(len(net.NetworkConfig.Plugins)).To(BeNumerically(">", 0))
-		Expect(net.NetworkConfig.Plugins[0].Network.Type).To(Equal("myplugin"))
+		Expect(len(net.config.Plugins)).To(BeNumerically(">", 0))
+		Expect(net.config.Plugins[0].Network.Type).To(Equal("myplugin"))
 
 		ocicni.Shutdown()
 	})
@@ -236,8 +236,8 @@ var _ = Describe("ocicni operations", func() {
 		tmp := ocicni.(*cniNetworkPlugin)
 		net := tmp.getDefaultNetwork()
 		Expect(net.name).To(Equal("test"))
-		Expect(len(net.NetworkConfig.Plugins)).To(BeNumerically(">", 0))
-		Expect(net.NetworkConfig.Plugins[0].Network.Type).To(Equal("myplugin"))
+		Expect(len(net.config.Plugins)).To(BeNumerically(">", 0))
+		Expect(net.config.Plugins[0].Network.Type).To(Equal("myplugin"))
 
 		// Delete the default network config, ensure ocicni begins to
 		// return a status error
@@ -268,8 +268,8 @@ var _ = Describe("ocicni operations", func() {
 		tmp := ocicni.(*cniNetworkPlugin)
 		net := tmp.getDefaultNetwork()
 		Expect(net.name).To(Equal("test"))
-		Expect(len(net.NetworkConfig.Plugins)).To(BeNumerically(">", 0))
-		Expect(net.NetworkConfig.Plugins[0].Network.Type).To(Equal("myplugin"))
+		Expect(len(net.config.Plugins)).To(BeNumerically(">", 0))
+		Expect(net.config.Plugins[0].Network.Type).To(Equal("myplugin"))
 
 		ocicni.Shutdown()
 	})
@@ -320,7 +320,7 @@ var _ = Describe("ocicni operations", func() {
 		Expect(len(netMap)).To(Equal(2))
 		net, ok := netMap["network2"]
 		Expect(ok).To(BeTrue())
-		Expect(net.NetworkConfig.Plugins[0].Network.Type).To(Equal("myplugin2"))
+		Expect(net.config.Plugins[0].Network.Type).To(Equal("myplugin2"))
 	})
 
 	It("build different runtime configs", func() {
