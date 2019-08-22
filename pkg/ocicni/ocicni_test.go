@@ -285,7 +285,8 @@ var _ = Describe("ocicni operations", func() {
 		_, _, err = writeConfig(tmpDir, "afdsfdsafdsa-network3.conf", "network4", "myplugin", "0.3.1")
 		Expect(err).NotTo(HaveOccurred())
 
-		netMap, defname, err := loadNetworks(&fakeExec{}, tmpDir, []string{"/opt/cni/bin"})
+		cniConfig := libcni.NewCNIConfig([]string{"/opt/cni/bin"}, &fakeExec{})
+		netMap, defname, err := loadNetworks(tmpDir, cniConfig)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(netMap)).To(Equal(4))
 		// filenames are sorted asciibetically
@@ -293,7 +294,8 @@ var _ = Describe("ocicni operations", func() {
 	})
 
 	It("returns no error from loadNetworks() when no config files exist", func() {
-		netMap, defname, err := loadNetworks(&fakeExec{}, tmpDir, []string{"/opt/cni/bin"})
+		cniConfig := libcni.NewCNIConfig([]string{"/opt/cni/bin"}, &fakeExec{})
+		netMap, defname, err := loadNetworks(tmpDir, cniConfig)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(netMap)).To(Equal(0))
 		// filenames are sorted asciibetically
@@ -309,7 +311,8 @@ var _ = Describe("ocicni operations", func() {
 		_, _, err = writeConfig(tmpDir, "5-network1.conf", "network2", "myplugin2", "0.3.1")
 		Expect(err).NotTo(HaveOccurred())
 
-		netMap, _, err := loadNetworks(&fakeExec{}, tmpDir, []string{"/opt/cni/bin"})
+		cniConfig := libcni.NewCNIConfig([]string{"/opt/cni/bin"}, &fakeExec{})
+		netMap, _, err := loadNetworks(tmpDir, cniConfig)
 		Expect(err).NotTo(HaveOccurred())
 
 		// We expect the type=myplugin network to be ignored since it

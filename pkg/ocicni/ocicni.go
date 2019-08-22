@@ -21,6 +21,7 @@ import (
 )
 
 type cniNetworkPlugin struct {
+	cniConfig *libcni.CNIConfig
 	loNetwork *cniNetwork
 
 	sync.RWMutex
@@ -51,7 +52,6 @@ type cniNetwork struct {
 	name          string
 	filePath      string
 	NetworkConfig *libcni.NetworkConfigList
-	CNIConfig     *libcni.CNIConfig
 }
 
 var errMissingDefaultNetwork = errors.New("Missing CNI default network")
@@ -199,9 +199,10 @@ func initCNI(exec cniinvoke.Exec, cacheDir, defaultNetName string, confDir strin
 		binDirs = []string{DefaultBinDir}
 	}
 	plugin := &cniNetworkPlugin{
+		cniConfig:      libcni.NewCNIConfig(binDirs, exec),
 		defaultNetName: defaultNetName,
 		networks:       make(map[string]*cniNetwork),
-		loNetwork:      getLoNetwork(exec, binDirs),
+		loNetwork:      getLoNetwork(),
 		confDir:        confDir,
 		binDirs:        binDirs,
 		shutdownChan:   make(chan struct{}),
@@ -246,7 +247,7 @@ func (plugin *cniNetworkPlugin) Shutdown() error {
 	return nil
 }
 
-func loadNetworks(exec cniinvoke.Exec, confDir string, binDirs []string) (map[string]*cniNetwork, string, error) {
+func loadNetworks(confDir string, cni *libcni.CNIConfig) (map[string]*cniNetwork, string, error) {
 	files, err := libcni.ConfFiles(confDir, []string{".conf", ".conflist", ".json"})
 	if err != nil {
 		return nil, "", err
@@ -292,12 +293,11 @@ func loadNetworks(exec cniinvoke.Exec, confDir string, binDirs []string) (map[st
 			name:          confList.Name,
 			filePath:      confFile,
 			NetworkConfig: confList,
-			CNIConfig:     libcni.NewCNIConfig(binDirs, exec),
 		}
 
 		// Validation on CNI config should be done to pre-check presence
 		// of plugins which are necessary.
-		if err := cniNet.validateNetwork(); err != nil {
+		if err := cniNet.validateNetwork(cni); err != nil {
 			logrus.Warningf("Error validating CNI config file %s: %v", confFile, err)
 			continue
 		}
@@ -314,7 +314,7 @@ func loadNetworks(exec cniinvoke.Exec, confDir string, binDirs []string) (map[st
 	return networks, defaultNetName, nil
 }
 
-func getLoNetwork(exec cniinvoke.Exec, binDirs []string) *cniNetwork {
+func getLoNetwork() *cniNetwork {
 	loConfig, err := libcni.ConfListFromBytes([]byte(`{
   "cniVersion": "0.3.1",
   "name": "cni-loopback",
@@ -330,14 +330,13 @@ func getLoNetwork(exec cniinvoke.Exec, binDirs []string) *cniNetwork {
 	loNetwork := &cniNetwork{
 		name:          "lo",
 		NetworkConfig: loConfig,
-		CNIConfig:     libcni.NewCNIConfig(binDirs, exec),
 	}
 
 	return loNetwork
 }
 
 func (plugin *cniNetworkPlugin) syncNetworkConfig() error {
-	networks, defaultNetName, err := loadNetworks(plugin.exec, plugin.confDir, plugin.binDirs)
+	networks, defaultNetName, err := loadNetworks(plugin.confDir, plugin.cniConfig)
 	if err != nil {
 		return err
 	}
@@ -419,7 +418,7 @@ func (plugin *cniNetworkPlugin) SetUpPod(podNetwork PodNetwork) ([]cnitypes.Resu
 	plugin.podLock(podNetwork).Lock()
 	defer plugin.podUnlock(podNetwork)
 
-	_, err := plugin.loNetwork.addToNetwork(plugin.cacheDir, &podNetwork, "lo", RuntimeConfig{})
+	_, err := plugin.loNetwork.addToNetwork(plugin.cacheDir, &podNetwork, "lo", RuntimeConfig{}, plugin.cniConfig)
 	if err != nil {
 		logrus.Errorf("Error while adding to cni lo network: %s", err)
 		return nil, err
@@ -427,7 +426,7 @@ func (plugin *cniNetworkPlugin) SetUpPod(podNetwork PodNetwork) ([]cnitypes.Resu
 
 	results := make([]cnitypes.Result, 0)
 	if err := plugin.forEachNetwork(&podNetwork, func(network *cniNetwork, ifName string, podNetwork *PodNetwork, runtimeConfig RuntimeConfig) error {
-		result, err := network.addToNetwork(plugin.cacheDir, podNetwork, ifName, runtimeConfig)
+		result, err := network.addToNetwork(plugin.cacheDir, podNetwork, ifName, runtimeConfig, plugin.cniConfig)
 		if err != nil {
 			logrus.Errorf("Error while adding pod to CNI network %q: %s", network.name, err)
 			return err
@@ -450,7 +449,7 @@ func (plugin *cniNetworkPlugin) TearDownPod(podNetwork PodNetwork) error {
 	defer plugin.podUnlock(podNetwork)
 
 	return plugin.forEachNetwork(&podNetwork, func(network *cniNetwork, ifName string, podNetwork *PodNetwork, runtimeConfig RuntimeConfig) error {
-		if err := network.deleteFromNetwork(plugin.cacheDir, podNetwork, ifName, runtimeConfig); err != nil {
+		if err := network.deleteFromNetwork(plugin.cacheDir, podNetwork, ifName, runtimeConfig, plugin.cniConfig); err != nil {
 			logrus.Errorf("Error while removing pod from CNI network %q: %s", network.name, err)
 			return err
 		}
@@ -466,7 +465,7 @@ func (plugin *cniNetworkPlugin) GetPodNetworkStatus(podNetwork PodNetwork) ([]cn
 
 	results := make([]cnitypes.Result, 0)
 	if err := plugin.forEachNetwork(&podNetwork, func(network *cniNetwork, ifName string, podNetwork *PodNetwork, runtimeConfig RuntimeConfig) error {
-		result, err := network.checkNetwork(plugin.cacheDir, podNetwork, ifName, runtimeConfig, plugin.nsManager)
+		result, err := network.checkNetwork(plugin.cacheDir, podNetwork, ifName, runtimeConfig, plugin.cniConfig, plugin.nsManager)
 		if err != nil {
 			logrus.Errorf("Error while checking pod to CNI network %q: %s", network.name, err)
 			return err
@@ -482,26 +481,23 @@ func (plugin *cniNetworkPlugin) GetPodNetworkStatus(podNetwork PodNetwork) ([]cn
 	return results, nil
 }
 
-func (network *cniNetwork) validateNetwork() error {
-	netConf, cniNet := network.NetworkConfig, network.CNIConfig
-
-	if _, err := cniNet.ValidateNetworkList(context.TODO(), netConf); err != nil {
+func (network *cniNetwork) validateNetwork(cni *libcni.CNIConfig) error {
+	if _, err := cni.ValidateNetworkList(context.TODO(), network.NetworkConfig); err != nil {
 		return fmt.Errorf("CNI config %q validation fails: %v", network.name, err)
 	}
 
 	return nil
 }
 
-func (network *cniNetwork) addToNetwork(cacheDir string, podNetwork *PodNetwork, ifName string, runtimeConfig RuntimeConfig) (cnitypes.Result, error) {
+func (network *cniNetwork) addToNetwork(cacheDir string, podNetwork *PodNetwork, ifName string, runtimeConfig RuntimeConfig, cni *libcni.CNIConfig) (cnitypes.Result, error) {
 	rt, err := buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
 	if err != nil {
 		logrus.Errorf("Error adding network: %v", err)
 		return nil, err
 	}
 
-	netconf, cninet := network.NetworkConfig, network.CNIConfig
-	logrus.Infof("About to add CNI network %s (type=%v)", netconf.Name, netconf.Plugins[0].Network.Type)
-	res, err := cninet.AddNetworkList(context.Background(), netconf, rt)
+	logrus.Infof("About to add CNI network %s (type=%v)", network.name, network.NetworkConfig.Plugins[0].Network.Type)
+	res, err := cni.AddNetworkList(context.Background(), network.NetworkConfig, rt)
 	if err != nil {
 		logrus.Errorf("Error adding network: %v", err)
 		return nil, err
@@ -510,16 +506,15 @@ func (network *cniNetwork) addToNetwork(cacheDir string, podNetwork *PodNetwork,
 	return res, nil
 }
 
-func (network *cniNetwork) checkNetwork(cacheDir string, podNetwork *PodNetwork, ifName string, runtimeConfig RuntimeConfig, nsManager *nsManager) (cnitypes.Result, error) {
-
+func (network *cniNetwork) checkNetwork(cacheDir string, podNetwork *PodNetwork, ifName string, runtimeConfig RuntimeConfig, cni *libcni.CNIConfig, nsManager *nsManager) (cnitypes.Result, error) {
 	rt, err := buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
 	if err != nil {
 		logrus.Errorf("Error checking network: %v", err)
 		return nil, err
 	}
 
-	netconf, cninet := network.NetworkConfig, network.CNIConfig
-	logrus.Infof("About to check CNI network %s (type=%v)", netconf.Name, netconf.Plugins[0].Network.Type)
+	netconf := network.NetworkConfig
+	logrus.Infof("About to check CNI network %s (type=%v)", network.name, netconf.Plugins[0].Network.Type)
 
 	gtet, err := cniversion.GreaterThanOrEqualTo(netconf.CNIVersion, "0.4.0")
 	if err != nil {
@@ -530,15 +525,15 @@ func (network *cniNetwork) checkNetwork(cacheDir string, podNetwork *PodNetwork,
 
 	// When CNIVersion supports Check, use it.  Otherwise fall back on what was done initially.
 	if gtet {
-		err = cninet.CheckNetworkList(context.Background(), netconf, rt)
-		logrus.Infof("Checking CNI network %s (config version=%v)", netconf.Name, netconf.CNIVersion)
+		err = cni.CheckNetworkList(context.Background(), netconf, rt)
+		logrus.Infof("Checking CNI network %s (config version=%v)", network.name, netconf.CNIVersion)
 		if err != nil {
 			logrus.Errorf("Error checking network: %v", err)
 			return nil, err
 		}
 	}
 
-	result, err = cninet.GetNetworkListCachedResult(netconf, rt)
+	result, err = cni.GetNetworkListCachedResult(netconf, rt)
 	if err != nil {
 		logrus.Errorf("Error GetNetworkListCachedResult: %v", err)
 		return nil, err
@@ -547,7 +542,7 @@ func (network *cniNetwork) checkNetwork(cacheDir string, podNetwork *PodNetwork,
 	}
 
 	// result doesn't exist, create one
-	logrus.Infof("Checking CNI network %s (config version=%v) nsManager=%v", netconf.Name, netconf.CNIVersion, nsManager)
+	logrus.Infof("Checking CNI network %s (config version=%v) nsManager=%v", network.name, netconf.CNIVersion, nsManager)
 
 	var cniInterface *cnicurrent.Interface
 	ips := []*cnicurrent.IPConfig{}
@@ -590,16 +585,15 @@ func (network *cniNetwork) checkNetwork(cacheDir string, podNetwork *PodNetwork,
 	return converted, nil
 }
 
-func (network *cniNetwork) deleteFromNetwork(cacheDir string, podNetwork *PodNetwork, ifName string, runtimeConfig RuntimeConfig) error {
+func (network *cniNetwork) deleteFromNetwork(cacheDir string, podNetwork *PodNetwork, ifName string, runtimeConfig RuntimeConfig, cni *libcni.CNIConfig) error {
 	rt, err := buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
 	if err != nil {
 		logrus.Errorf("Error deleting network: %v", err)
 		return err
 	}
 
-	netconf, cninet := network.NetworkConfig, network.CNIConfig
-	logrus.Infof("About to del CNI network %s (type=%v)", netconf.Name, netconf.Plugins[0].Network.Type)
-	err = cninet.DelNetworkList(context.Background(), netconf, rt)
+	logrus.Infof("About to del CNI network %s (type=%v)", network.name, network.NetworkConfig.Plugins[0].Network.Type)
+	err = cni.DelNetworkList(context.Background(), network.NetworkConfig, rt)
 	if err != nil {
 		logrus.Errorf("Error deleting network: %v", err)
 		return err
