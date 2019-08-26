@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	cnitypes "github.com/containernetworking/cni/pkg/types"
 	cnicurrent "github.com/containernetworking/cni/pkg/types/current"
 	"github.com/cri-o/ocicni/pkg/ocicni"
 )
@@ -24,9 +23,9 @@ const (
 	CmdDel    = "del"
 )
 
-func printSandboxResults(results []cnitypes.Result) {
+func printSandboxResults(results []ocicni.NetResult) {
 	for _, r := range results {
-		result, _ := cnicurrent.NewResultFromResult(r)
+		result, _ := cnicurrent.NewResultFromResult(r.Result)
 		if result != nil {
 			result030, _ := cnicurrent.GetResult(result)
 			if result030 != nil {
