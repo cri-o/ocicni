@@ -83,12 +83,17 @@ func main() {
 		exit(err)
 	}
 
+	attachments := make([]ocicni.NetAttachment, 0, len(networks))
+	for _, netName := range networks {
+		attachments = append(attachments, ocicni.NetAttachment{Name: netName})
+	}
+
 	podNetwork := ocicni.PodNetwork{
 		Namespace: flag.Args()[1],
 		Name:      flag.Args()[2],
 		ID:        flag.Args()[3],
 		NetNS:     flag.Args()[4],
-		Networks:  networks,
+		Networks:  attachments,
 	}
 
 	switch flag.Args()[0] {

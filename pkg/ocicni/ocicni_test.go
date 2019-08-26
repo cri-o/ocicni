@@ -520,7 +520,10 @@ var _ = Describe("ocicni operations", func() {
 			Namespace: "namespace1",
 			ID:        "1234567890",
 			NetNS:     "/foo/bar/netns",
-			Networks:  []string{"network3", "network4"},
+			Networks: []NetAttachment{
+				{Name: "network3"},
+				{Name: "network4"},
+			},
 		}
 		results, err := ocicni.SetUpPod(podNet)
 		Expect(err).NotTo(HaveOccurred())
@@ -596,7 +599,10 @@ var _ = Describe("ocicni operations", func() {
 			Namespace: "namespace1",
 			ID:        "1234567890",
 			NetNS:     "/foo/bar/netns",
-			Networks:  []string{"network3", "network4"},
+			Networks: []NetAttachment{
+				{Name: "network3"},
+				{Name: "network4"},
+			},
 		}
 		results, err := ocicni.SetUpPod(podNet)
 		Expect(err).NotTo(HaveOccurred())

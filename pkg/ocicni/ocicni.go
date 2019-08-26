@@ -394,17 +394,45 @@ func (plugin *cniNetworkPlugin) Name() string {
 func (plugin *cniNetworkPlugin) forEachNetwork(podNetwork *PodNetwork, forEachFunc func(*cniNetwork, string, *PodNetwork, RuntimeConfig) error) error {
 	networks := podNetwork.Networks
 	if len(networks) == 0 {
-		networks = append(networks, plugin.GetDefaultNetworkName())
+		networks = append(networks, NetAttachment{
+			Name: plugin.GetDefaultNetworkName(),
+		})
 	}
-	for i, netName := range networks {
-		// Interface names start at "eth0" and count up for each network
-		ifName := fmt.Sprintf("eth%d", i)
-		network, err := plugin.getNetwork(netName)
+
+	allIfNames := make(map[string]bool)
+	for _, req := range networks {
+		if req.Ifname != "" {
+			// Make sure the requested name isn't already assigned
+			if allIfNames[req.Ifname] {
+				return fmt.Errorf("network %q requested interface name %q already assigned", req.Name, req.Ifname)
+			}
+			allIfNames[req.Ifname] = true
+		}
+	}
+
+	for _, network := range networks {
+		ifName := network.Ifname
+		if ifName == "" {
+			for i := 0; i < 10000; i++ {
+				candidate := fmt.Sprintf("eth%d", i)
+				if !allIfNames[candidate] {
+					allIfNames[candidate] = true
+					ifName = candidate
+					break
+				}
+			}
+			if ifName == "" {
+				return fmt.Errorf("failed to find free interface name for network %q", network.Name)
+			}
+		}
+
+		cniNet, err := plugin.getNetwork(network.Name)
 		if err != nil {
 			logrus.Errorf(err.Error())
 			return err
 		}
-		if err := forEachFunc(network, ifName, podNetwork, podNetwork.RuntimeConfig[netName]); err != nil {
+
+		if err := forEachFunc(cniNet, ifName, podNetwork, podNetwork.RuntimeConfig[network.Name]); err != nil {
 			return err
 		}
 	}
@@ -434,7 +462,10 @@ func (plugin *cniNetworkPlugin) SetUpPod(podNetwork PodNetwork) ([]NetResult, er
 		}
 		results = append(results, NetResult{
 			Result: result,
-			Ifname: ifName,
+			NetAttachment: NetAttachment{
+				Name:   network.name,
+				Ifname: ifName,
+			},
 		})
 		return nil
 	}); err != nil {
@@ -477,7 +508,10 @@ func (plugin *cniNetworkPlugin) GetPodNetworkStatus(podNetwork PodNetwork) ([]Ne
 		if result != nil {
 			results = append(results, NetResult{
 				Result: result,
-				Ifname: ifName,
+				NetAttachment: NetAttachment{
+					Name:   network.name,
+					Ifname: ifName,
+				},
 			})
 		}
 		return nil
