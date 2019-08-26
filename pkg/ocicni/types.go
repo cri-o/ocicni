@@ -85,6 +85,14 @@ type PodNetwork struct {
 	RuntimeConfig map[string]RuntimeConfig
 }
 
+// NetResult contains the result the network attachment operation
+type NetResult struct {
+	// Result is the CNI Result
+	Result types.Result
+	// Ifname is the container interface name for this network attachment
+	Ifname string
+}
+
 // CNIPlugin is the interface that needs to be implemented by a plugin
 type CNIPlugin interface {
 	// Name returns the plugin's name. This will be used when searching
@@ -98,13 +106,13 @@ type CNIPlugin interface {
 	// SetUpPod is the method called after the sandbox container of
 	// the pod has been created but before the other containers of the
 	// pod are launched.
-	SetUpPod(network PodNetwork) ([]types.Result, error)
+	SetUpPod(network PodNetwork) ([]NetResult, error)
 
 	// TearDownPod is the method called before a pod's sandbox container will be deleted
 	TearDownPod(network PodNetwork) error
 
 	// Status is the method called to obtain the ipv4 or ipv6 addresses of the pod sandbox
-	GetPodNetworkStatus(network PodNetwork) ([]types.Result, error)
+	GetPodNetworkStatus(network PodNetwork) ([]NetResult, error)
 
 	// NetworkStatus returns error if the network plugin is in error state
 	Status() error

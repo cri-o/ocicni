@@ -411,7 +411,7 @@ func (plugin *cniNetworkPlugin) forEachNetwork(podNetwork *PodNetwork, forEachFu
 	return nil
 }
 
-func (plugin *cniNetworkPlugin) SetUpPod(podNetwork PodNetwork) ([]cnitypes.Result, error) {
+func (plugin *cniNetworkPlugin) SetUpPod(podNetwork PodNetwork) ([]NetResult, error) {
 	if err := plugin.networksAvailable(&podNetwork); err != nil {
 		return nil, err
 	}
@@ -425,14 +425,17 @@ func (plugin *cniNetworkPlugin) SetUpPod(podNetwork PodNetwork) ([]cnitypes.Resu
 		return nil, err
 	}
 
-	results := make([]cnitypes.Result, 0)
+	results := make([]NetResult, 0)
 	if err := plugin.forEachNetwork(&podNetwork, func(network *cniNetwork, ifName string, podNetwork *PodNetwork, runtimeConfig RuntimeConfig) error {
 		result, err := network.addToNetwork(plugin.cacheDir, podNetwork, ifName, runtimeConfig, plugin.cniConfig)
 		if err != nil {
 			logrus.Errorf("Error while adding pod to CNI network %q: %s", network.name, err)
 			return err
 		}
-		results = append(results, result)
+		results = append(results, NetResult{
+			Result: result,
+			Ifname: ifName,
+		})
 		return nil
 	}); err != nil {
 		return nil, err
@@ -460,11 +463,11 @@ func (plugin *cniNetworkPlugin) TearDownPod(podNetwork PodNetwork) error {
 
 // GetPodNetworkStatus returns IP addressing and interface details for all
 // networks attached to the pod.
-func (plugin *cniNetworkPlugin) GetPodNetworkStatus(podNetwork PodNetwork) ([]cnitypes.Result, error) {
+func (plugin *cniNetworkPlugin) GetPodNetworkStatus(podNetwork PodNetwork) ([]NetResult, error) {
 	plugin.podLock(podNetwork).Lock()
 	defer plugin.podUnlock(podNetwork)
 
-	results := make([]cnitypes.Result, 0)
+	results := make([]NetResult, 0)
 	if err := plugin.forEachNetwork(&podNetwork, func(network *cniNetwork, ifName string, podNetwork *PodNetwork, runtimeConfig RuntimeConfig) error {
 		result, err := network.checkNetwork(plugin.cacheDir, podNetwork, ifName, runtimeConfig, plugin.cniConfig, plugin.nsManager)
 		if err != nil {
@@ -472,7 +475,10 @@ func (plugin *cniNetworkPlugin) GetPodNetworkStatus(podNetwork PodNetwork) ([]cn
 			return err
 		}
 		if result != nil {
-			results = append(results, result)
+			results = append(results, NetResult{
+				Result: result,
+				Ifname: ifName,
+			})
 		}
 		return nil
 	}); err != nil {
