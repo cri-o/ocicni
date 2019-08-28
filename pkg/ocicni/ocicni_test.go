@@ -2,6 +2,7 @@ package ocicni
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -30,7 +31,26 @@ func writeConfig(dir, fileName, netName, plugin string, version string) (string,
 	return conf, confPath, ioutil.WriteFile(confPath, []byte(conf), 0644)
 }
 
+func writeCacheFile(dir, containerID, netName, ifname, config string) {
+	cachedData := fmt.Sprintf(`{
+	  "kind": "cniCacheV1",
+	  "config": "%s",
+	  "results": {
+	    "cniVersion": "0.4.0"
+	  }
+	}`, base64.StdEncoding.EncodeToString([]byte(config)))
+
+	dirName := filepath.Join(dir, "results")
+	err := os.MkdirAll(dirName, 0700)
+	Expect(err).NotTo(HaveOccurred())
+
+	filePath := filepath.Join(dirName, fmt.Sprintf("%s-%s-%s", netName, containerID, ifname))
+	err = ioutil.WriteFile(filePath, []byte(cachedData), 0644)
+	Expect(err).NotTo(HaveOccurred())
+}
+
 type fakePlugin struct {
+	isLoopback   bool
 	expectedEnv  []string
 	expectedConf string
 	result       types.Result
@@ -54,6 +74,7 @@ type TestConf struct {
 
 func (f *fakeExec) addLoopback() {
 	f.plugins = append(f.plugins, &fakePlugin{
+		isLoopback: true,
 		expectedConf: `{
         "cniVersion": "0.3.1",
         "name": "cni-loopback",
@@ -110,12 +131,15 @@ func (f *fakeExec) ExecPlugin(ctx context.Context, pluginPath string, stdinData 
 		f.addIndex++
 	case "DEL":
 		Expect(len(f.plugins)).To(BeNumerically(">", f.delIndex))
-		// +1 to skip loopback since it isn't run on DEL
-		index = f.delIndex + 1
+		index = f.delIndex
 		f.delIndex++
 	case "CHECK":
 		Expect(len(f.plugins)).To(BeNumerically("==", f.addIndex))
-		index = f.chkIndex + 1
+		if f.plugins[f.chkIndex].isLoopback {
+			// Skip loopback during check
+			f.chkIndex++
+		}
+		index = f.chkIndex
 		f.chkIndex++
 	case "VERSION":
 		// Just return all supported versions
@@ -144,8 +168,11 @@ func (f *fakeExec) ExecPlugin(ctx context.Context, pluginPath string, stdinData 
 		return nil, plugin.err
 	}
 
-	resultJSON, err := json.Marshal(plugin.result)
-	Expect(err).NotTo(HaveOccurred())
+	resultJSON := []byte{}
+	if plugin.result != nil {
+		resultJSON, err = json.Marshal(plugin.result)
+		Expect(err).NotTo(HaveOccurred())
+	}
 	return resultJSON, nil
 }
 
@@ -457,8 +484,7 @@ var _ = Describe("ocicni operations", func() {
 
 		err = ocicni.TearDownPod(podNet)
 		Expect(err).NotTo(HaveOccurred())
-		// -1 because loopback doesn't get torn down
-		Expect(fake.delIndex).To(Equal(len(fake.plugins) - 1))
+		Expect(fake.delIndex).To(Equal(len(fake.plugins)))
 
 		ocicni.Shutdown()
 	})
@@ -536,8 +562,7 @@ var _ = Describe("ocicni operations", func() {
 
 		err = ocicni.TearDownPod(podNet)
 		Expect(err).NotTo(HaveOccurred())
-		// -1 because loopback doesn't get torn down
-		Expect(fake.delIndex).To(Equal(len(fake.plugins) - 1))
+		Expect(fake.delIndex).To(Equal(len(fake.plugins)))
 
 		ocicni.Shutdown()
 	})
@@ -623,9 +648,94 @@ var _ = Describe("ocicni operations", func() {
 
 		err = ocicni.TearDownPod(podNet)
 		Expect(err).NotTo(HaveOccurred())
-		// -1 because loopback doesn't get torn down
-		Expect(fake.delIndex).To(Equal(len(fake.plugins) - 1))
+		Expect(fake.delIndex).To(Equal(len(fake.plugins)))
 
 		ocicni.Shutdown()
+	})
+
+	It("tears down a pod using cached info not the default network", func() {
+		const (
+			containerID    string = "1234567890"
+			netName        string = "network1"
+			loNetName      string = "cni-loopback"
+			defaultNetName string = "test"
+		)
+
+		// Unused default config
+		_, _, err := writeConfig(tmpDir, "10-test.conf", defaultNetName, "myplugin", "0.3.1")
+		Expect(err).NotTo(HaveOccurred())
+
+		loConf := fmt.Sprintf(`{
+		    "cniVersion": "0.3.1",
+		    "name": "%s",
+		    "type": "loopback"
+		}`, loNetName)
+		writeCacheFile(cacheDir, containerID, loNetName, "lo", loConf)
+
+		conf := fmt.Sprintf(`{
+		  "name": "%s",
+		  "type": "myplugin",
+		  "cniVersion": "0.4.0"
+		}`, netName)
+		writeCacheFile(cacheDir, containerID, netName, "eth0", conf)
+
+		fake := &fakeExec{}
+		fake.addLoopback()
+		fake.addPlugin(nil, conf, nil, nil)
+
+		ocicni, err := initCNI(fake, cacheDir, defaultNetName, tmpDir, "/opt/cni/bin")
+		Expect(err).NotTo(HaveOccurred())
+		defer ocicni.Shutdown()
+
+		podNet := PodNetwork{
+			Name:      "pod1",
+			Namespace: "namespace1",
+			ID:        containerID,
+			NetNS:     "/foo/bar/netns",
+			Networks:  []NetAttachment{{netName, "eth0"}},
+		}
+
+		err = ocicni.TearDownPod(podNet)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(fake.delIndex).To(Equal(len(fake.plugins)))
+	})
+
+	It("tears down a pod using specified networks when cached info is missing", func() {
+		const (
+			containerID    string = "1234567890"
+			defaultNetName string = "defaultnet"
+			netName1       string = "network1"
+			netName2       string = "network2"
+		)
+
+		conf1, _, err := writeConfig(tmpDir, fmt.Sprintf("10-%s.conf", netName1), netName1, "myplugin", "0.4.0")
+		Expect(err).NotTo(HaveOccurred())
+
+		conf2, _, err := writeConfig(tmpDir, fmt.Sprintf("20-%s.conf", netName2), netName2, "myplugin2", "0.4.0")
+		Expect(err).NotTo(HaveOccurred())
+
+		fake := &fakeExec{}
+		fake.addLoopback()
+		fake.addPlugin(nil, conf1, nil, nil)
+		fake.addPlugin(nil, conf2, nil, nil)
+
+		ocicni, err := initCNI(fake, cacheDir, defaultNetName, tmpDir, "/opt/cni/bin")
+		Expect(err).NotTo(HaveOccurred())
+		defer ocicni.Shutdown()
+
+		podNet := PodNetwork{
+			Name:      "pod1",
+			Namespace: "namespace1",
+			ID:        containerID,
+			NetNS:     "/foo/bar/netns",
+			Networks: []NetAttachment{
+				{Name: netName1},
+				{Name: netName2},
+			},
+		}
+
+		err = ocicni.TearDownPod(podNet)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(fake.delIndex).To(Equal(len(fake.plugins)))
 	})
 })
