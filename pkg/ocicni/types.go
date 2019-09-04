@@ -75,9 +75,10 @@ type PodNetwork struct {
 	// NetNS is the network namespace path of the sandbox.
 	NetNS string
 
-	// Networks is a list of CNI network names to attach to the sandbox
-	// Leave this list empty to attach the default network to the sandbox
-	Networks []string
+	// Networks is a list of CNI network names (and optional interface
+	// names) to attach to the sandbox. Leave this list empty to attach the
+	// default network to the sandbox
+	Networks []NetAttachment
 
 	// NetworkConfig is configuration specific to a single CNI network.
 	// It is optional, and can be omitted for some or all specified networks
@@ -85,12 +86,22 @@ type PodNetwork struct {
 	RuntimeConfig map[string]RuntimeConfig
 }
 
+// NetAttachment describes a container network attachment
+type NetAttachment struct {
+	// NetName contains the name of the CNI network to which the container
+	// should be or is attached
+	Name string
+	// Ifname contains the optional interface name of the attachment
+	Ifname string
+}
+
 // NetResult contains the result the network attachment operation
 type NetResult struct {
 	// Result is the CNI Result
 	Result types.Result
-	// Ifname is the container interface name for this network attachment
-	Ifname string
+	// NetAttachment contains the network and interface names of this
+	// network attachment
+	NetAttachment
 }
 
 // CNIPlugin is the interface that needs to be implemented by a plugin
