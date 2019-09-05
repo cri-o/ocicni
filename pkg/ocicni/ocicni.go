@@ -25,7 +25,7 @@ type cniNetworkPlugin struct {
 	loNetwork *cniNetwork
 
 	sync.RWMutex
-	defaultNetName string
+	defaultNetName netName
 	networks       map[string]*cniNetwork
 
 	nsManager *nsManager
@@ -46,6 +46,11 @@ type cniNetworkPlugin struct {
 	// For testcases
 	exec     cniinvoke.Exec
 	cacheDir string
+}
+
+type netName struct {
+	name       string
+	changeable bool
 }
 
 type cniNetwork struct {
@@ -186,6 +191,8 @@ func (plugin *cniNetworkPlugin) monitorConfDir(start *sync.WaitGroup) {
 // If defaultNetName is not empty, a CNI config with that network name will
 // be used as the default CNI network, and container network operations will
 // fail until that network config is present and valid.
+// If defaultNetName is empty, CNI config files should be reloaded real-time and
+// defaultNetName should be changeable and determined by file sorting.
 func InitCNI(defaultNetName string, confDir string, binDirs ...string) (CNIPlugin, error) {
 	return initCNI(nil, "", defaultNetName, confDir, binDirs...)
 }
@@ -198,18 +205,24 @@ func initCNI(exec cniinvoke.Exec, cacheDir, defaultNetName string, confDir strin
 	if len(binDirs) == 0 {
 		binDirs = []string{DefaultBinDir}
 	}
+
 	plugin := &cniNetworkPlugin{
-		cniConfig:      libcni.NewCNIConfig(binDirs, exec),
-		defaultNetName: defaultNetName,
-		networks:       make(map[string]*cniNetwork),
-		loNetwork:      getLoNetwork(),
-		confDir:        confDir,
-		binDirs:        binDirs,
-		shutdownChan:   make(chan struct{}),
-		done:           &sync.WaitGroup{},
-		pods:           make(map[string]*podLock),
-		exec:           exec,
-		cacheDir:       cacheDir,
+		cniConfig: libcni.NewCNIConfig(binDirs, exec),
+		defaultNetName: netName{
+			name: defaultNetName,
+			// If defaultNetName is not assigned in initialization,
+			// it should be changeable
+			changeable: defaultNetName == "",
+		},
+		networks:     make(map[string]*cniNetwork),
+		loNetwork:    getLoNetwork(),
+		confDir:      confDir,
+		binDirs:      binDirs,
+		shutdownChan: make(chan struct{}),
+		done:         &sync.WaitGroup{},
+		pods:         make(map[string]*podLock),
+		exec:         exec,
+		cacheDir:     cacheDir,
 	}
 
 	if exec == nil {
@@ -348,9 +361,15 @@ func (plugin *cniNetworkPlugin) syncNetworkConfig() error {
 
 	plugin.Lock()
 	defer plugin.Unlock()
-	if plugin.defaultNetName == "" {
-		plugin.defaultNetName = defaultNetName
+
+	// Update defaultNetName if it is changeable
+	if plugin.defaultNetName.changeable {
+		plugin.defaultNetName.name = defaultNetName
+		logrus.Infof("Update default CNI network name to %s", defaultNetName)
+	} else {
+		logrus.Warnf("Default CNI network name %s is unchangeable", plugin.defaultNetName.name)
 	}
+
 	plugin.networks = networks
 
 	return nil
@@ -369,7 +388,7 @@ func (plugin *cniNetworkPlugin) getNetwork(name string) (*cniNetwork, error) {
 func (plugin *cniNetworkPlugin) GetDefaultNetworkName() string {
 	plugin.RLock()
 	defer plugin.RUnlock()
-	return plugin.defaultNetName
+	return plugin.defaultNetName.name
 }
 
 func (plugin *cniNetworkPlugin) getDefaultNetwork() *cniNetwork {
