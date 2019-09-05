@@ -305,7 +305,11 @@ func loadNetworks(confDir string, cni *libcni.CNIConfig) (map[string]*cniNetwork
 
 		logrus.Infof("Found CNI network %s (type=%v) at %s", confList.Name, confList.Plugins[0].Network.Type, confFile)
 
-		networks[confList.Name] = cniNet
+		if _, ok := networks[confList.Name]; !ok {
+			networks[confList.Name] = cniNet
+		} else {
+			logrus.Infof("Ignore CNI network %s (type=%v) at %s because already exists", confList.Name, confList.Plugins[0].Network.Type, confFile)
+		}
 
 		if defaultNetName == "" {
 			defaultNetName = confList.Name

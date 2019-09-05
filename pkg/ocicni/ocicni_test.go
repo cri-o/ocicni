@@ -342,12 +342,12 @@ var _ = Describe("ocicni operations", func() {
 		netMap, _, err := loadNetworks(tmpDir, cniConfig)
 		Expect(err).NotTo(HaveOccurred())
 
-		// We expect the type=myplugin network to be ignored since it
-		// was read earlier than the type=myplugin2 network with the same name
+		// We expect the type=myplugin2 network be ignored since it
+		// was read earlier than the type=myplugin network with the same name
 		Expect(len(netMap)).To(Equal(2))
 		net, ok := netMap["network2"]
 		Expect(ok).To(BeTrue())
-		Expect(net.config.Plugins[0].Network.Type).To(Equal("myplugin2"))
+		Expect(net.config.Plugins[0].Network.Type).To(Equal("myplugin"))
 	})
 
 	It("build different runtime configs", func() {
