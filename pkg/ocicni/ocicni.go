@@ -2,11 +2,14 @@ package ocicni
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io/ioutil"
 	"net"
 	"os"
 	"path"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -319,21 +322,26 @@ func loadNetworks(confDir string, cni *libcni.CNIConfig) (map[string]*cniNetwork
 	return networks, defaultNetName, nil
 }
 
+const (
+	loIfname  string = "lo"
+	loNetname string = "cni-loopback"
+)
+
 func getLoNetwork() *cniNetwork {
-	loConfig, err := libcni.ConfListFromBytes([]byte(`{
+	loConfig, err := libcni.ConfListFromBytes([]byte(fmt.Sprintf(`{
   "cniVersion": "0.3.1",
-  "name": "cni-loopback",
+  "name": "%s",
   "plugins": [{
     "type": "loopback"
   }]
-}`))
+}`, loNetname)))
 	if err != nil {
 		// The hardcoded config above should always be valid and unit tests will
 		// catch this
 		panic(err)
 	}
 	loNetwork := &cniNetwork{
-		name:   "lo",
+		name:   loIfname,
 		config: loConfig,
 	}
 
@@ -504,7 +512,7 @@ func buildLoopbackRuntimeConf(cacheDir string, podNetwork *PodNetwork) *libcni.R
 		ContainerID: podNetwork.ID,
 		NetNS:       podNetwork.NetNS,
 		CacheDir:    cacheDir,
-		IfName:      "lo",
+		IfName:      loIfname,
 	}
 }
 
@@ -544,7 +552,84 @@ func (plugin *cniNetworkPlugin) SetUpPod(podNetwork PodNetwork) ([]NetResult, er
 	return results, nil
 }
 
+func (plugin *cniNetworkPlugin) getCachedNetworkInfo(containerID string) ([]NetAttachment, error) {
+	cacheDir := libcni.CacheDir
+	if plugin.cacheDir != "" {
+		cacheDir = plugin.cacheDir
+	}
+
+	dirPath := filepath.Join(cacheDir, "results")
+	entries, err := ioutil.ReadDir(dirPath)
+	if err != nil {
+		return nil, err
+	}
+
+	fileNames := make([]string, 0, len(entries))
+	for _, e := range entries {
+		fileNames = append(fileNames, e.Name())
+	}
+	sort.Strings(fileNames)
+
+	attachments := []NetAttachment{}
+	for _, fname := range fileNames {
+		part := fmt.Sprintf("-%s-", containerID)
+		pos := strings.Index(fname, part)
+		if pos <= 0 || pos+len(part) >= len(fname) {
+			continue
+		}
+
+		cacheFile := filepath.Join(dirPath, fname)
+		bytes, err := ioutil.ReadFile(cacheFile)
+		if err != nil {
+			logrus.Warningf("failed to read CNI cache file %s: %v", cacheFile, err)
+			continue
+		}
+
+		cachedInfo := struct {
+			Kind        string `json:"kind"`
+			IfName      string `json:"ifName"`
+			ContainerID string `json:"containerID"`
+			NetName     string `json:"networkName"`
+		}{}
+
+		if err := json.Unmarshal(bytes, &cachedInfo); err != nil {
+			logrus.Warningf("failed to unmarshal CNI cache file %s: %v", cacheFile, err)
+			continue
+		}
+		if cachedInfo.Kind != libcni.CNICacheV1 {
+			logrus.Warningf("unknown CNI cache file %s kind %q", cacheFile, cachedInfo.Kind)
+			continue
+		}
+		if cachedInfo.ContainerID != containerID {
+			continue
+		}
+		// Ignore the loopback interface; it's handled separately
+		if cachedInfo.IfName == loIfname && cachedInfo.NetName == loNetname {
+			continue
+		}
+		if cachedInfo.IfName == "" || cachedInfo.NetName == "" {
+			logrus.Warningf("missing CNI cache file %s ifname %q or netname %q", cacheFile, cachedInfo.IfName, cachedInfo.NetName)
+			continue
+		}
+
+		attachments = append(attachments, NetAttachment{
+			Name:   cachedInfo.NetName,
+			Ifname: cachedInfo.IfName,
+		})
+	}
+	return attachments, nil
+}
+
+// TearDownPod tears down pod networks. Prefers cached pod attachment information
+// but falls back to given network attachment information.
 func (plugin *cniNetworkPlugin) TearDownPod(podNetwork PodNetwork) error {
+	if len(podNetwork.Networks) == 0 {
+		attachments, err := plugin.getCachedNetworkInfo(podNetwork.ID)
+		if err == nil && len(attachments) > 0 {
+			podNetwork.Networks = attachments
+		}
+	}
+
 	if err := plugin.networksAvailable(&podNetwork); err != nil {
 		return err
 	}

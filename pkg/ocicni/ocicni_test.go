@@ -35,10 +35,13 @@ func writeCacheFile(dir, containerID, netName, ifname, config string) {
 	cachedData := fmt.Sprintf(`{
 	  "kind": "cniCacheV1",
 	  "config": "%s",
+	  "containerId": "%s",
+	  "ifName": "%s",
+	  "networkName": "%s",
 	  "results": {
 	    "cniVersion": "0.4.0"
 	  }
-	}`, base64.StdEncoding.EncodeToString([]byte(config)))
+	}`, base64.StdEncoding.EncodeToString([]byte(config)), containerID, ifname, netName)
 
 	dirName := filepath.Join(dir, "results")
 	err := os.MkdirAll(dirName, 0700)
@@ -95,11 +98,12 @@ func (f *fakeExec) addPlugin(expectedEnv []string, expectedConf string, result *
 	})
 }
 
-func matchArray(a1, a2 []string) {
-	Expect(len(a1)).To(Equal(len(a2)))
-	for _, e1 := range a1 {
+// Ensure everything in needles is also present in haystack
+func matchArray(needles, haystack []string) {
+	Expect(len(needles)).To(BeNumerically("<=", len(haystack)))
+	for _, e1 := range needles {
 		found := ""
-		for _, e2 := range a2 {
+		for _, e2 := range haystack {
 			if e1 == e2 {
 				found = e2
 				break
@@ -161,7 +165,7 @@ func (f *fakeExec) ExecPlugin(ctx context.Context, pluginPath string, stdinData 
 	}
 
 	if len(plugin.expectedEnv) > 0 {
-		matchArray(environ, plugin.expectedEnv)
+		matchArray(plugin.expectedEnv, environ)
 	}
 
 	if plugin.err != nil {
@@ -653,51 +657,84 @@ var _ = Describe("ocicni operations", func() {
 		ocicni.Shutdown()
 	})
 
-	It("tears down a pod using cached info not the default network", func() {
+	Context("when tearing down a pod using cached info", func() {
 		const (
 			containerID    string = "1234567890"
-			netName        string = "network1"
+			netName1       string = "network1"
+			ifname1        string = "eth0"
+			netName2       string = "network2"
+			ifname2        string = "eth1"
 			loNetName      string = "cni-loopback"
 			defaultNetName string = "test"
 		)
-
-		// Unused default config
-		_, _, err := writeConfig(tmpDir, "10-test.conf", defaultNetName, "myplugin", "0.3.1")
-		Expect(err).NotTo(HaveOccurred())
-
-		loConf := fmt.Sprintf(`{
-		    "cniVersion": "0.3.1",
-		    "name": "%s",
-		    "type": "loopback"
-		}`, loNetName)
-		writeCacheFile(cacheDir, containerID, loNetName, "lo", loConf)
-
-		conf := fmt.Sprintf(`{
-		  "name": "%s",
-		  "type": "myplugin",
-		  "cniVersion": "0.4.0"
-		}`, netName)
-		writeCacheFile(cacheDir, containerID, netName, "eth0", conf)
-
-		fake := &fakeExec{}
-		fake.addLoopback()
-		fake.addPlugin(nil, conf, nil, nil)
-
-		ocicni, err := initCNI(fake, cacheDir, defaultNetName, tmpDir, "/opt/cni/bin")
-		Expect(err).NotTo(HaveOccurred())
-		defer ocicni.Shutdown()
+		var (
+			fake   *fakeExec
+			ocicni CNIPlugin
+		)
 
 		podNet := PodNetwork{
 			Name:      "pod1",
 			Namespace: "namespace1",
 			ID:        containerID,
 			NetNS:     "/foo/bar/netns",
-			Networks:  []NetAttachment{{netName, "eth0"}},
 		}
 
-		err = ocicni.TearDownPod(podNet)
-		Expect(err).NotTo(HaveOccurred())
-		Expect(fake.delIndex).To(Equal(len(fake.plugins)))
+		BeforeEach(func() {
+			// Unused default config
+			_, _, err := writeConfig(tmpDir, "10-test.conf", defaultNetName, "myplugin", "0.3.1")
+			Expect(err).NotTo(HaveOccurred())
+
+			loConf := fmt.Sprintf(`{
+			    "cniVersion": "0.3.1",
+			    "name": "%s",
+			    "type": "loopback"
+			}`, loNetName)
+			writeCacheFile(cacheDir, containerID, loNetName, "lo", loConf)
+
+			conf1 := fmt.Sprintf(`{
+			  "name": "%s",
+			  "type": "myplugin",
+			  "cniVersion": "0.4.0"
+			}`, netName1)
+			writeCacheFile(cacheDir, containerID, netName1, ifname1, conf1)
+
+			conf2 := fmt.Sprintf(`{
+			  "name": "%s",
+			  "type": "myplugin",
+			  "cniVersion": "0.4.0"
+			}`, netName2)
+			writeCacheFile(cacheDir, containerID, netName2, ifname2, conf2)
+
+			fake = &fakeExec{}
+			fake.addLoopback()
+			fake.addPlugin([]string{fmt.Sprintf("CNI_IFNAME=%s", ifname1)}, conf1, nil, nil)
+			fake.addPlugin([]string{fmt.Sprintf("CNI_IFNAME=%s", ifname2)}, conf2, nil, nil)
+
+			ocicni, err = initCNI(fake, cacheDir, defaultNetName, tmpDir, "/opt/cni/bin")
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			ocicni.Shutdown()
+		})
+
+		It("uses the specified networks", func() {
+			podNet.Networks = []NetAttachment{
+				{netName1, ifname1},
+				{netName2, ifname2},
+			}
+
+			err := ocicni.TearDownPod(podNet)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(fake.delIndex).To(Equal(len(fake.plugins)))
+		})
+
+		It("uses the cached networks", func() {
+			podNet.Networks = []NetAttachment{}
+			err := ocicni.TearDownPod(podNet)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(fake.delIndex).To(Equal(len(fake.plugins)))
+		})
 	})
 
 	It("tears down a pod using specified networks when cached info is missing", func() {
