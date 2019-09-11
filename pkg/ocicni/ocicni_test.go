@@ -38,7 +38,7 @@ func writeCacheFile(dir, containerID, netName, ifname, config string) {
 	  "containerId": "%s",
 	  "ifName": "%s",
 	  "networkName": "%s",
-	  "results": {
+	  "result": {
 	    "cniVersion": "0.4.0"
 	  }
 	}`, base64.StdEncoding.EncodeToString([]byte(config)), containerID, ifname, netName)
