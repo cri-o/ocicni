@@ -393,6 +393,26 @@ var _ = Describe("ocicni operations", func() {
 		Expect(len(rt.Args)).To(Equal(5))
 		Expect(rt.Args[4][1]).To(Equal("172.16.0.1"))
 
+		// runtimeConfig with invalid MAC
+		runtimeConfig = RuntimeConfig{MAC: "f0:a6"}
+		_, err = buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
+		Expect(err).To(HaveOccurred())
+
+		// runtimeConfig with valid MAC
+		runtimeConfig = RuntimeConfig{MAC: "9e:0c:d9:b2:f0:a6"}
+		rt, err = buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(rt.Args)).To(Equal(5))
+		Expect(rt.Args[4][1]).To(Equal("9e:0c:d9:b2:f0:a6"))
+
+		// runtimeConfig with valid IP and valid MAC
+		runtimeConfig = RuntimeConfig{IP: "172.16.0.1", MAC: "9e:0c:d9:b2:f0:a6"}
+		rt, err = buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(len(rt.Args)).To(Equal(6))
+		Expect(rt.Args[4][1]).To(Equal("172.16.0.1"))
+		Expect(rt.Args[5][1]).To(Equal("9e:0c:d9:b2:f0:a6"))
+
 		// runtimeConfig with portMappings is nil
 		runtimeConfig = RuntimeConfig{PortMappings: nil}
 		_, err = buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
