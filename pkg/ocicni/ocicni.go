@@ -175,11 +175,7 @@ func (plugin *cniNetworkPlugin) monitorConfDir(start *sync.WaitGroup) {
 			}
 
 		case err := <-plugin.watcher.Errors:
-			if err == nil {
-				continue
-			}
 			logrus.Errorf("CNI monitoring error %v", err)
-			return
 
 		case <-plugin.shutdownChan:
 			return
