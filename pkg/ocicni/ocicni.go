@@ -3,7 +3,6 @@ package ocicni
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -62,7 +61,7 @@ type cniNetwork struct {
 	config   *libcni.NetworkConfigList
 }
 
-var errMissingDefaultNetwork = errors.New("Missing CNI default network")
+var errMissingDefaultNetwork = "No CNI configuration file in %s. Has your network provider started?"
 
 type podLock struct {
 	// Count of in-flight operations for this pod; when this reaches zero
@@ -413,7 +412,7 @@ func (plugin *cniNetworkPlugin) getDefaultNetwork() *cniNetwork {
 // to attach the pod to.
 func (plugin *cniNetworkPlugin) networksAvailable(podNetwork *PodNetwork) error {
 	if len(podNetwork.Networks) == 0 && plugin.getDefaultNetwork() == nil {
-		return errMissingDefaultNetwork
+		return fmt.Errorf(errMissingDefaultNetwork, plugin.confDir)
 	}
 	return nil
 }
@@ -854,7 +853,7 @@ func buildCNIRuntimeConf(cacheDir string, podNetwork *PodNetwork, ifName string,
 
 func (plugin *cniNetworkPlugin) Status() error {
 	if plugin.getDefaultNetwork() == nil {
-		return errMissingDefaultNetwork
+		return fmt.Errorf(errMissingDefaultNetwork, plugin.confDir)
 	}
 	return nil
 }
