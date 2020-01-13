@@ -133,4 +133,7 @@ type CNIPlugin interface {
 
 	// Shutdown terminates all driver operations
 	Shutdown() error
+
+	// Networks returns the list of currently loaded CNI networks
+	Networks() []CNINetwork
 }

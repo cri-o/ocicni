@@ -24,11 +24,11 @@ import (
 
 type cniNetworkPlugin struct {
 	cniConfig *libcni.CNIConfig
-	loNetwork *cniNetwork
+	loNetwork *CNINetwork
 
 	sync.RWMutex
 	defaultNetName netName
-	networks       map[string]*cniNetwork
+	networks       map[string]*CNINetwork
 
 	nsManager *nsManager
 	confDir   string
@@ -55,7 +55,7 @@ type netName struct {
 	changeable bool
 }
 
-type cniNetwork struct {
+type CNINetwork struct {
 	name     string
 	filePath string
 	config   *libcni.NetworkConfigList
@@ -216,7 +216,7 @@ func initCNI(exec cniinvoke.Exec, cacheDir, defaultNetName string, confDir strin
 			// it should be changeable
 			changeable: defaultNetName == "",
 		},
-		networks:     make(map[string]*cniNetwork),
+		networks:     make(map[string]*CNINetwork),
 		loNetwork:    getLoNetwork(),
 		confDir:      confDir,
 		binDirs:      binDirs,
@@ -262,13 +262,13 @@ func (plugin *cniNetworkPlugin) Shutdown() error {
 	return nil
 }
 
-func loadNetworks(confDir string, cni *libcni.CNIConfig) (map[string]*cniNetwork, string, error) {
+func loadNetworks(confDir string, cni *libcni.CNIConfig) (map[string]*CNINetwork, string, error) {
 	files, err := libcni.ConfFiles(confDir, []string{".conf", ".conflist", ".json"})
 	if err != nil {
 		return nil, "", err
 	}
 
-	networks := make(map[string]*cniNetwork)
+	networks := make(map[string]*CNINetwork)
 	defaultNetName := ""
 
 	sort.Strings(files)
@@ -312,7 +312,7 @@ func loadNetworks(confDir string, cni *libcni.CNIConfig) (map[string]*cniNetwork
 			confList.Name = path.Base(confFile)
 		}
 
-		cniNet := &cniNetwork{
+		cniNet := &CNINetwork{
 			name:     confList.Name,
 			filePath: confFile,
 			config:   confList,
@@ -339,7 +339,7 @@ const (
 	loNetname string = "cni-loopback"
 )
 
-func getLoNetwork() *cniNetwork {
+func getLoNetwork() *CNINetwork {
 	loConfig, err := libcni.ConfListFromBytes([]byte(fmt.Sprintf(`{
   "cniVersion": "0.3.1",
   "name": "%s",
@@ -352,7 +352,7 @@ func getLoNetwork() *cniNetwork {
 		// catch this
 		panic(err)
 	}
-	loNetwork := &cniNetwork{
+	loNetwork := &CNINetwork{
 		name:   loIfname,
 		config: loConfig,
 	}
@@ -382,7 +382,7 @@ func (plugin *cniNetworkPlugin) syncNetworkConfig() error {
 	return nil
 }
 
-func (plugin *cniNetworkPlugin) getNetwork(name string) (*cniNetwork, error) {
+func (plugin *cniNetworkPlugin) getNetwork(name string) (*CNINetwork, error) {
 	plugin.RLock()
 	defer plugin.RUnlock()
 	net, ok := plugin.networks[name]
@@ -398,7 +398,7 @@ func (plugin *cniNetworkPlugin) GetDefaultNetworkName() string {
 	return plugin.defaultNetName.name
 }
 
-func (plugin *cniNetworkPlugin) getDefaultNetwork() *cniNetwork {
+func (plugin *cniNetworkPlugin) getDefaultNetwork() *CNINetwork {
 	defaultNetName := plugin.GetDefaultNetworkName()
 	if defaultNetName == "" {
 		return nil
@@ -421,8 +421,8 @@ func (plugin *cniNetworkPlugin) Name() string {
 	return CNIPluginName
 }
 
-func (plugin *cniNetworkPlugin) loadNetworkFromCache(name string, rt *libcni.RuntimeConf) (*cniNetwork, *libcni.RuntimeConf, error) {
-	cniNet := &cniNetwork{
+func (plugin *cniNetworkPlugin) loadNetworkFromCache(name string, rt *libcni.RuntimeConf) (*CNINetwork, *libcni.RuntimeConf, error) {
+	cniNet := &CNINetwork{
 		name: name,
 		config: &libcni.NetworkConfigList{
 			Name: name,
@@ -455,7 +455,7 @@ func (plugin *cniNetworkPlugin) loadNetworkFromCache(name string, rt *libcni.Run
 	return cniNet, rt, nil
 }
 
-type forEachNetworkFn func(*cniNetwork, *PodNetwork, *libcni.RuntimeConf) error
+type forEachNetworkFn func(*CNINetwork, *PodNetwork, *libcni.RuntimeConf) error
 
 func (plugin *cniNetworkPlugin) forEachNetwork(podNetwork *PodNetwork, fromCache bool, actionFn forEachNetworkFn) error {
 	networks := podNetwork.Networks
@@ -498,7 +498,7 @@ func (plugin *cniNetworkPlugin) forEachNetwork(podNetwork *PodNetwork, fromCache
 			return err
 		}
 
-		var cniNet *cniNetwork
+		var cniNet *CNINetwork
 		if fromCache {
 			var newRt *libcni.RuntimeConf
 			cniNet, newRt, err = plugin.loadNetworkFromCache(network.Name, rt)
@@ -549,7 +549,7 @@ func (plugin *cniNetworkPlugin) SetUpPod(podNetwork PodNetwork) ([]NetResult, er
 	}
 
 	results := make([]NetResult, 0)
-	if err := plugin.forEachNetwork(&podNetwork, false, func(network *cniNetwork, podNetwork *PodNetwork, rt *libcni.RuntimeConf) error {
+	if err := plugin.forEachNetwork(&podNetwork, false, func(network *CNINetwork, podNetwork *PodNetwork, rt *libcni.RuntimeConf) error {
 		result, err := network.addToNetwork(rt, plugin.cniConfig)
 		if err != nil {
 			logrus.Errorf("Error while adding pod to CNI network %q: %s", network.name, err)
@@ -661,7 +661,7 @@ func (plugin *cniNetworkPlugin) TearDownPod(podNetwork PodNetwork) error {
 	plugin.podLock(podNetwork).Lock()
 	defer plugin.podUnlock(podNetwork)
 
-	return plugin.forEachNetwork(&podNetwork, true, func(network *cniNetwork, podNetwork *PodNetwork, rt *libcni.RuntimeConf) error {
+	return plugin.forEachNetwork(&podNetwork, true, func(network *CNINetwork, podNetwork *PodNetwork, rt *libcni.RuntimeConf) error {
 		if err := network.deleteFromNetwork(rt, plugin.cniConfig); err != nil {
 			logrus.Errorf("Error while removing pod from CNI network %q: %s", network.name, err)
 			return err
@@ -677,7 +677,7 @@ func (plugin *cniNetworkPlugin) GetPodNetworkStatus(podNetwork PodNetwork) ([]Ne
 	defer plugin.podUnlock(podNetwork)
 
 	results := make([]NetResult, 0)
-	if err := plugin.forEachNetwork(&podNetwork, true, func(network *cniNetwork, podNetwork *PodNetwork, rt *libcni.RuntimeConf) error {
+	if err := plugin.forEachNetwork(&podNetwork, true, func(network *CNINetwork, podNetwork *PodNetwork, rt *libcni.RuntimeConf) error {
 		result, err := network.checkNetwork(rt, plugin.cniConfig, plugin.nsManager, podNetwork.NetNS)
 		if err != nil {
 			logrus.Errorf("Error while checking pod to CNI network %q: %s", network.name, err)
@@ -700,7 +700,7 @@ func (plugin *cniNetworkPlugin) GetPodNetworkStatus(podNetwork PodNetwork) ([]Ne
 	return results, nil
 }
 
-func (network *cniNetwork) addToNetwork(rt *libcni.RuntimeConf, cni *libcni.CNIConfig) (cnitypes.Result, error) {
+func (network *CNINetwork) addToNetwork(rt *libcni.RuntimeConf, cni *libcni.CNIConfig) (cnitypes.Result, error) {
 	logrus.Infof("About to add CNI network %s (type=%v)", network.name, network.config.Plugins[0].Network.Type)
 	res, err := cni.AddNetworkList(context.Background(), network.config, rt)
 	if err != nil {
@@ -711,7 +711,7 @@ func (network *cniNetwork) addToNetwork(rt *libcni.RuntimeConf, cni *libcni.CNIC
 	return res, nil
 }
 
-func (network *cniNetwork) checkNetwork(rt *libcni.RuntimeConf, cni *libcni.CNIConfig, nsManager *nsManager, netns string) (cnitypes.Result, error) {
+func (network *CNINetwork) checkNetwork(rt *libcni.RuntimeConf, cni *libcni.CNIConfig, nsManager *nsManager, netns string) (cnitypes.Result, error) {
 	logrus.Infof("About to check CNI network %s (type=%v)", network.name, network.config.Plugins[0].Network.Type)
 
 	gtet, err := cniversion.GreaterThanOrEqualTo(network.config.CNIVersion, "0.4.0")
@@ -783,7 +783,7 @@ func (network *cniNetwork) checkNetwork(rt *libcni.RuntimeConf, cni *libcni.CNIC
 	return converted, nil
 }
 
-func (network *cniNetwork) deleteFromNetwork(rt *libcni.RuntimeConf, cni *libcni.CNIConfig) error {
+func (network *CNINetwork) deleteFromNetwork(rt *libcni.RuntimeConf, cni *libcni.CNIConfig) error {
 	logrus.Infof("About to del CNI network %s (type=%v)", network.name, network.config.Plugins[0].Network.Type)
 	if err := cni.DelNetworkList(context.Background(), network.config, rt); err != nil {
 		logrus.Errorf("Error deleting network: %v", err)
@@ -856,4 +856,28 @@ func (plugin *cniNetworkPlugin) Status() error {
 		return fmt.Errorf(errMissingDefaultNetwork, plugin.confDir)
 	}
 	return nil
+}
+
+// Name returns the network identifier
+func (n *CNINetwork) Name() string {
+	return n.name
+}
+
+// FilePath returns the network file path on disk
+func (n *CNINetwork) FilePath() string {
+	return n.filePath
+}
+
+// Config returns the CNI network config
+func (n *CNINetwork) Config() *libcni.NetworkConfigList {
+	return n.config
+}
+
+// Networks returns the list of currently loaded networks
+func (plugin *cniNetworkPlugin) Networks() []CNINetwork {
+	v := make([]CNINetwork, 0, len(plugin.networks))
+	for _, value := range plugin.networks {
+		v = append(v, *value)
+	}
+	return v
 }
