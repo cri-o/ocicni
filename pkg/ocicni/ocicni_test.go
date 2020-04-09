@@ -12,11 +12,15 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/vishvananda/netlink"
+
+	"github.com/containernetworking/cni/libcni"
 	"github.com/containernetworking/cni/pkg/types"
 	"github.com/containernetworking/cni/pkg/types/current"
 	"github.com/containernetworking/cni/pkg/version"
+	"github.com/containernetworking/plugins/pkg/ns"
+	"github.com/containernetworking/plugins/pkg/testutils"
 
-	"github.com/containernetworking/cni/libcni"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 )
@@ -53,7 +57,6 @@ func writeCacheFile(dir, containerID, netName, ifname, config string) {
 }
 
 type fakePlugin struct {
-	isLoopback   bool
 	expectedEnv  []string
 	expectedConf string
 	result       types.Result
@@ -73,20 +76,6 @@ type TestConf struct {
 	CNIVersion string `json:"cniVersion,omitempty"`
 	Name       string `json:"name,omitempty"`
 	Type       string `json:"type,omitempty"`
-}
-
-func (f *fakeExec) addLoopback() {
-	f.plugins = append(f.plugins, &fakePlugin{
-		isLoopback: true,
-		expectedConf: `{
-        "cniVersion": "0.3.1",
-        "name": "cni-loopback",
-        "type": "loopback"
-}`,
-		result: &current.Result{
-			CNIVersion: "0.2.0",
-		},
-	})
 }
 
 func (f *fakeExec) addPlugin(expectedEnv []string, expectedConf string, result *current.Result, err error) {
@@ -139,10 +128,6 @@ func (f *fakeExec) ExecPlugin(ctx context.Context, pluginPath string, stdinData 
 		f.delIndex++
 	case "CHECK":
 		Expect(len(f.plugins)).To(BeNumerically("==", f.addIndex))
-		if f.plugins[f.chkIndex].isLoopback {
-			// Skip loopback during check
-			f.chkIndex++
-		}
 		index = f.chkIndex
 		f.chkIndex++
 	case "VERSION":
@@ -194,8 +179,9 @@ func ensureCIDR(cidr string) *net.IPNet {
 
 var _ = Describe("ocicni operations", func() {
 	var (
-		tmpDir   string
-		cacheDir string
+		tmpDir    string
+		cacheDir  string
+		networkNS ns.NetNS
 	)
 
 	BeforeEach(func() {
@@ -204,9 +190,15 @@ var _ = Describe("ocicni operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 		cacheDir, err = ioutil.TempDir("", "ocicni_cache")
 		Expect(err).NotTo(HaveOccurred())
+
+		networkNS, err = testutils.NewNS()
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	AfterEach(func() {
+		Expect(networkNS.Close()).To(Succeed())
+		Expect(testutils.UnmountNS(networkNS)).To(Succeed())
+
 		err := os.RemoveAll(tmpDir)
 		Expect(err).NotTo(HaveOccurred())
 		err = os.RemoveAll(cacheDir)
@@ -482,14 +474,13 @@ var _ = Describe("ocicni operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		fake := &fakeExec{}
-		fake.addLoopback()
 		expectedResult := &current.Result{
 			CNIVersion: "0.3.1",
 			Interfaces: []*current.Interface{
 				{
 					Name:    "eth0",
 					Mac:     "01:23:45:67:89:01",
-					Sandbox: "/foo/bar/netns",
+					Sandbox: networkNS.Path(),
 				},
 			},
 			IPs: []*current.IPConfig{
@@ -509,7 +500,7 @@ var _ = Describe("ocicni operations", func() {
 			Name:      "pod1",
 			Namespace: "namespace1",
 			ID:        "1234567890",
-			NetNS:     "/foo/bar/netns",
+			NetNS:     networkNS.Path(),
 		}
 		results, err := ocicni.SetUpPod(podNet)
 		Expect(err).NotTo(HaveOccurred())
@@ -517,6 +508,16 @@ var _ = Describe("ocicni operations", func() {
 		Expect(len(results)).To(Equal(1))
 		r := results[0].Result.(*current.Result)
 		Expect(reflect.DeepEqual(r, expectedResult)).To(BeTrue())
+
+		// Make sure loopback device is up
+		err = networkNS.Do(func(_ ns.NetNS) error {
+			defer GinkgoRecover()
+			link, err := netlink.LinkByName("lo")
+			Expect(err).NotTo(HaveOccurred())
+			Expect(link.Attrs().Flags & net.FlagUp).To(Equal(net.FlagUp))
+			return nil
+		})
+		Expect(err).NotTo(HaveOccurred())
 
 		err = ocicni.TearDownPod(podNet)
 		Expect(err).NotTo(HaveOccurred())
@@ -535,14 +536,13 @@ var _ = Describe("ocicni operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		fake := &fakeExec{}
-		fake.addLoopback()
 		expectedResult1 := &current.Result{
 			CNIVersion: "0.3.1",
 			Interfaces: []*current.Interface{
 				{
 					Name:    "eth0",
 					Mac:     "01:23:45:67:89:01",
-					Sandbox: "/foo/bar/netns",
+					Sandbox: networkNS.Path(),
 				},
 			},
 			IPs: []*current.IPConfig{
@@ -561,7 +561,7 @@ var _ = Describe("ocicni operations", func() {
 				{
 					Name:    "eth1",
 					Mac:     "01:23:45:67:89:02",
-					Sandbox: "/foo/bar/netns",
+					Sandbox: networkNS.Path(),
 				},
 			},
 			IPs: []*current.IPConfig{
@@ -581,7 +581,7 @@ var _ = Describe("ocicni operations", func() {
 			Name:      "pod1",
 			Namespace: "namespace1",
 			ID:        "1234567890",
-			NetNS:     "/foo/bar/netns",
+			NetNS:     networkNS.Path(),
 			Networks: []NetAttachment{
 				{Name: "network3"},
 				{Name: "network4"},
@@ -613,14 +613,13 @@ var _ = Describe("ocicni operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		fake := &fakeExec{}
-		fake.addLoopback()
 		expectedResult1 := &current.Result{
 			CNIVersion: "0.4.0",
 			Interfaces: []*current.Interface{
 				{
 					Name:    "eth0",
 					Mac:     "01:23:45:67:89:01",
-					Sandbox: "/foo/bar/netns",
+					Sandbox: networkNS.Path(),
 				},
 			},
 			IPs: []*current.IPConfig{
@@ -639,7 +638,7 @@ var _ = Describe("ocicni operations", func() {
 				{
 					Name:    "eth1",
 					Mac:     "01:23:45:67:89:02",
-					Sandbox: "/foo/bar/netns",
+					Sandbox: networkNS.Path(),
 				},
 			},
 			IPs: []*current.IPConfig{
@@ -659,7 +658,7 @@ var _ = Describe("ocicni operations", func() {
 			Name:      "pod1",
 			Namespace: "namespace1",
 			ID:        "1234567890",
-			NetNS:     "/foo/bar/netns",
+			NetNS:     networkNS.Path(),
 			Networks: []NetAttachment{
 				{Name: "network3"},
 				{Name: "network4"},
@@ -696,32 +695,18 @@ var _ = Describe("ocicni operations", func() {
 			ifname1        string = "eth0"
 			netName2       string = "network2"
 			ifname2        string = "eth1"
-			loNetName      string = "cni-loopback"
 			defaultNetName string = "test"
 		)
 		var (
 			fake   *fakeExec
 			ocicni CNIPlugin
+			podNet PodNetwork
 		)
-
-		podNet := PodNetwork{
-			Name:      "pod1",
-			Namespace: "namespace1",
-			ID:        containerID,
-			NetNS:     "/foo/bar/netns",
-		}
 
 		BeforeEach(func() {
 			// Unused default config
 			_, _, err := writeConfig(tmpDir, "10-test.conf", defaultNetName, "myplugin", "0.3.1")
 			Expect(err).NotTo(HaveOccurred())
-
-			loConf := fmt.Sprintf(`{
-			    "cniVersion": "0.3.1",
-			    "name": "%s",
-			    "type": "loopback"
-			}`, loNetName)
-			writeCacheFile(cacheDir, containerID, loNetName, "lo", loConf)
 
 			conf1 := fmt.Sprintf(`{
 			  "name": "%s",
@@ -738,12 +723,18 @@ var _ = Describe("ocicni operations", func() {
 			writeCacheFile(cacheDir, containerID, netName2, ifname2, conf2)
 
 			fake = &fakeExec{}
-			fake.addLoopback()
 			fake.addPlugin([]string{fmt.Sprintf("CNI_IFNAME=%s", ifname1)}, conf1, nil, nil)
 			fake.addPlugin([]string{fmt.Sprintf("CNI_IFNAME=%s", ifname2)}, conf2, nil, nil)
 
 			ocicni, err = initCNI(fake, cacheDir, defaultNetName, tmpDir, "/opt/cni/bin")
 			Expect(err).NotTo(HaveOccurred())
+
+			podNet = PodNetwork{
+				Name:      "pod1",
+				Namespace: "namespace1",
+				ID:        containerID,
+				NetNS:     networkNS.Path(),
+			}
 		})
 
 		AfterEach(func() {
@@ -784,7 +775,6 @@ var _ = Describe("ocicni operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		fake := &fakeExec{}
-		fake.addLoopback()
 		fake.addPlugin(nil, conf1, nil, nil)
 		fake.addPlugin(nil, conf2, nil, nil)
 
@@ -796,7 +786,7 @@ var _ = Describe("ocicni operations", func() {
 			Name:      "pod1",
 			Namespace: "namespace1",
 			ID:        containerID,
-			NetNS:     "/foo/bar/netns",
+			NetNS:     networkNS.Path(),
 			Networks: []NetAttachment{
 				{Name: netName1},
 				{Name: netName2},
