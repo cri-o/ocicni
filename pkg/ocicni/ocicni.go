@@ -485,7 +485,7 @@ func (plugin *cniNetworkPlugin) GetPodNetworkStatusWithContext(ctx context.Conte
 	return results, nil
 }
 
-func (network *cniNetwork) addToNetwork(cacheDir string, podNetwork *PodNetwork, ifName string, runtimeConfig RuntimeConfig) (cnitypes.Result, error) {
+func (network *cniNetwork) addToNetwork(ctx context.Context, cacheDir string, podNetwork *PodNetwork, ifName string, runtimeConfig RuntimeConfig) (cnitypes.Result, error) {
 	rt, err := buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
 	if err != nil {
 		logrus.Errorf("Error adding network: %v", err)
@@ -503,7 +503,7 @@ func (network *cniNetwork) addToNetwork(cacheDir string, podNetwork *PodNetwork,
 	return res, nil
 }
 
-func (network *cniNetwork) checkNetwork(cacheDir string, podNetwork *PodNetwork, ifName string, runtimeConfig RuntimeConfig, nsManager *nsManager) (cnitypes.Result, error) {
+func (network *cniNetwork) checkNetwork(ctx context.Context, cacheDir string, podNetwork *PodNetwork, ifName string, runtimeConfig RuntimeConfig, nsManager *nsManager) (cnitypes.Result, error) {
 
 	rt, err := buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
 	if err != nil {
@@ -577,7 +577,7 @@ func (network *cniNetwork) checkNetwork(cacheDir string, podNetwork *PodNetwork,
 	return result, nil
 }
 
-func (network *cniNetwork) deleteFromNetwork(cacheDir string, podNetwork *PodNetwork, ifName string, runtimeConfig RuntimeConfig) error {
+func (network *cniNetwork) deleteFromNetwork(ctx context.Context, cacheDir string, podNetwork *PodNetwork, ifName string, runtimeConfig RuntimeConfig) error {
 	rt, err := buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
 	if err != nil {
 		logrus.Errorf("Error deleting network: %v", err)
