@@ -198,6 +198,10 @@ func (plugin *cniNetworkPlugin) monitorConfDir(start *sync.WaitGroup) {
 // If defaultNetName is empty, CNI config files should be reloaded real-time and
 // defaultNetName should be changeable and determined by file sorting.
 func InitCNI(defaultNetName string, confDir string, binDirs ...string) (CNIPlugin, error) {
+	logrus.SetFormatter(&log.TextFormatter{
+		FullTimestamp: false,
+	})
+
 	return initCNI(nil, "", defaultNetName, confDir, binDirs...)
 }
 
