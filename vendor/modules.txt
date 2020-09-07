@@ -1,4 +1,4 @@
-# github.com/containernetworking/cni v0.7.2-0.20190904153231-83439463f784
+# github.com/containernetworking/cni v0.8.0
 github.com/containernetworking/cni/libcni
 github.com/containernetworking/cni/pkg/invoke
 github.com/containernetworking/cni/pkg/skel
@@ -7,7 +7,7 @@ github.com/containernetworking/cni/pkg/types/020
 github.com/containernetworking/cni/pkg/types/current
 github.com/containernetworking/cni/pkg/utils
 github.com/containernetworking/cni/pkg/version
-# github.com/containernetworking/plugins v0.8.5
+# github.com/containernetworking/plugins v0.8.7
 github.com/containernetworking/plugins/pkg/ns
 github.com/containernetworking/plugins/pkg/testutils
 # github.com/fsnotify/fsnotify v1.4.7
@@ -85,5 +85,5 @@ golang.org/x/text/transform
 gopkg.in/fsnotify.v1
 # gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7
 gopkg.in/tomb.v1
-# gopkg.in/yaml.v2 v2.2.2
+# gopkg.in/yaml.v2 v2.2.1
 gopkg.in/yaml.v2
