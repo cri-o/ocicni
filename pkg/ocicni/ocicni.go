@@ -13,14 +13,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/vishvananda/netlink"
-
 	"github.com/containernetworking/cni/libcni"
 	cniinvoke "github.com/containernetworking/cni/pkg/invoke"
 	cnitypes "github.com/containernetworking/cni/pkg/types"
 	cnicurrent "github.com/containernetworking/cni/pkg/types/current"
 	cniversion "github.com/containernetworking/cni/pkg/version"
-	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/fsnotify/fsnotify"
 	"github.com/sirupsen/logrus"
 )
@@ -504,49 +501,6 @@ func (plugin *cniNetworkPlugin) forEachNetwork(podNetwork *PodNetwork, fromCache
 	return nil
 }
 
-func bringUpLoopback(netns string) error {
-	if err := ns.WithNetNSPath(netns, func(_ ns.NetNS) error {
-		link, err := netlink.LinkByName(loIfname)
-		if err == nil {
-			err = netlink.LinkSetUp(link)
-		}
-		if err != nil {
-			return err
-		}
-
-		v4Addrs, err := netlink.AddrList(link, netlink.FAMILY_V4)
-		if err != nil {
-			return err
-		}
-		if len(v4Addrs) != 0 {
-			// sanity check that this is a loopback address
-			for _, addr := range v4Addrs {
-				if !addr.IP.IsLoopback() {
-					return fmt.Errorf("loopback interface found with non-loopback address %q", addr.IP)
-				}
-			}
-		}
-
-		v6Addrs, err := netlink.AddrList(link, netlink.FAMILY_V6)
-		if err != nil {
-			return err
-		}
-		if len(v6Addrs) != 0 {
-			// sanity check that this is a loopback address
-			for _, addr := range v6Addrs {
-				if !addr.IP.IsLoopback() {
-					return fmt.Errorf("loopback interface found with non-loopback address %q", addr.IP)
-				}
-			}
-		}
-
-		return nil
-	}); err != nil {
-		return fmt.Errorf("error adding loopback interface: %s", err)
-	}
-	return nil
-}
-
 func (plugin *cniNetworkPlugin) SetUpPod(podNetwork PodNetwork) ([]NetResult, error) {
 	return plugin.SetUpPodWithContext(context.Background(), podNetwork)
 }
@@ -655,20 +609,6 @@ func (plugin *cniNetworkPlugin) getCachedNetworkInfo(containerID string) ([]NetA
 	return attachments, nil
 }
 
-func tearDownLoopback(netns string) error {
-	return ns.WithNetNSPath(netns, func(_ ns.NetNS) error {
-		link, err := netlink.LinkByName(loIfname)
-		if err != nil {
-			return err // not tested
-		}
-		err = netlink.LinkSetDown(link)
-		if err != nil {
-			return err // not tested
-		}
-		return nil
-	})
-}
-
 // TearDownPod tears down pod networks. Prefers cached pod attachment information
 // but falls back to given network attachment information.
 func (plugin *cniNetworkPlugin) TearDownPod(podNetwork PodNetwork) error {
@@ -702,25 +642,6 @@ func (plugin *cniNetworkPlugin) TearDownPodWithContext(ctx context.Context, podN
 		}
 		return nil
 	})
-}
-
-func checkLoopback(netns string) error {
-	// Make sure loopback interface is up
-	if err := ns.WithNetNSPath(netns, func(_ ns.NetNS) error {
-		link, err := netlink.LinkByName(loIfname)
-		if err != nil {
-			return err
-		}
-
-		if link.Attrs().Flags&net.FlagUp != net.FlagUp {
-			return fmt.Errorf("loopback interface is down")
-		}
-
-		return nil
-	}); err != nil {
-		return fmt.Errorf("error checking loopback interface: %v", err)
-	}
-	return nil
 }
 
 // GetPodNetworkStatus returns IP addressing and interface details for all
