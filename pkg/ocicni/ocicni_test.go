@@ -758,6 +758,19 @@ var _ = Describe("ocicni operations", func() {
 			Expect(err).NotTo(HaveOccurred())
 			Expect(fake.delIndex).To(Equal(len(fake.plugins)))
 		})
+		It("verifies that network operations can be locked for a pod using cached networks", func() {
+			podNet.Networks = []NetAttachment{}
+			tmp := ocicni.(*cniNetworkPlugin)
+			Expect(len(tmp.pods)).To(Equal(0))
+			tmp.podLock(podNet)
+			Expect(len(tmp.pods)).To(Equal(1))
+		})
+		It("verifies that network operations can be unlocked for a pod using cached networks", func() {
+			podNet.Networks = []NetAttachment{}
+			tmp := ocicni.(*cniNetworkPlugin)
+			tmp.podUnlock(podNet)
+			Expect(len(tmp.pods)).To(Equal(0))
+		})
 	})
 
 	It("tears down a pod using specified networks when cached info is missing", func() {
