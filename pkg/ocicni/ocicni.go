@@ -637,8 +637,7 @@ func (plugin *cniNetworkPlugin) TearDownPodWithContext(ctx context.Context, podN
 
 	return plugin.forEachNetwork(&podNetwork, true, func(network *cniNetwork, podNetwork *PodNetwork, rt *libcni.RuntimeConf) error {
 		if err := network.deleteFromNetwork(ctx, rt, plugin.cniConfig); err != nil {
-			logrus.Errorf("Error while removing pod from CNI network %q: %s", network.name, err)
-			return err
+			return fmt.Errorf("Error while removing pod from CNI network %q: %s", network.name, err)
 		}
 		return nil
 	})
@@ -771,7 +770,6 @@ func (network *cniNetwork) checkNetwork(ctx context.Context, rt *libcni.RuntimeC
 func (network *cniNetwork) deleteFromNetwork(ctx context.Context, rt *libcni.RuntimeConf, cni *libcni.CNIConfig) error {
 	logrus.Infof("About to del CNI network %s (type=%v)", network.name, network.config.Plugins[0].Network.Type)
 	if err := cni.DelNetworkList(ctx, network.config, rt); err != nil {
-		logrus.Errorf("Error deleting network %s: %v", network.name, err)
 		return err
 	}
 	return nil
