@@ -198,6 +198,11 @@ func InitCNI(defaultNetName string, confDir string, binDirs ...string) (CNIPlugi
 	return initCNI(nil, "", defaultNetName, confDir, binDirs...)
 }
 
+// InitCNIWithCache works like InitCNI except that it takes the cni cache directory as third param.
+func InitCNIWithCache(defaultNetName, confDir, cacheDir string, binDirs ...string) (CNIPlugin, error) {
+	return initCNI(nil, cacheDir, defaultNetName, confDir, binDirs...)
+}
+
 // Internal function to allow faking out exec functions for testing
 func initCNI(exec cniinvoke.Exec, cacheDir, defaultNetName string, confDir string, binDirs ...string) (CNIPlugin, error) {
 	if confDir == "" {
@@ -208,7 +213,7 @@ func initCNI(exec cniinvoke.Exec, cacheDir, defaultNetName string, confDir strin
 	}
 
 	plugin := &cniNetworkPlugin{
-		cniConfig: libcni.NewCNIConfig(binDirs, exec),
+		cniConfig: libcni.NewCNIConfigWithCacheDir(binDirs, cacheDir, exec),
 		defaultNetName: netName{
 			name: defaultNetName,
 			// If defaultNetName is not assigned in initialization,
@@ -468,7 +473,7 @@ func (plugin *cniNetworkPlugin) forEachNetwork(podNetwork *PodNetwork, fromCache
 			}
 		}
 
-		rt, err := buildCNIRuntimeConf(plugin.cacheDir, podNetwork, ifName, podNetwork.RuntimeConfig[network.Name])
+		rt, err := buildCNIRuntimeConf(podNetwork, ifName, podNetwork.RuntimeConfig[network.Name])
 		if err != nil {
 			logrus.Errorf("error building CNI runtime config: %v", err)
 			return err
@@ -775,13 +780,12 @@ func (network *cniNetwork) deleteFromNetwork(ctx context.Context, rt *libcni.Run
 	return nil
 }
 
-func buildCNIRuntimeConf(cacheDir string, podNetwork *PodNetwork, ifName string, runtimeConfig RuntimeConfig) (*libcni.RuntimeConf, error) {
+func buildCNIRuntimeConf(podNetwork *PodNetwork, ifName string, runtimeConfig RuntimeConfig) (*libcni.RuntimeConf, error) {
 	logrus.Infof("Got pod network %+v", podNetwork)
 
 	rt := &libcni.RuntimeConf{
 		ContainerID: podNetwork.ID,
 		NetNS:       podNetwork.NetNS,
-		CacheDir:    cacheDir,
 		IfName:      ifName,
 		Args: [][2]string{
 			{"IgnoreUnknown", "1"},
