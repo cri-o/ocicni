@@ -275,13 +275,19 @@ func loadNetworks(confDir string, cni *libcni.CNIConfig) (map[string]*cniNetwork
 		if strings.HasSuffix(confFile, ".conflist") {
 			confList, err = libcni.ConfListFromFile(confFile)
 			if err != nil {
-				logrus.Errorf("Error loading CNI config list file %s: %v", confFile, err)
+				// do not log ENOENT errors
+				if !os.IsNotExist(err) {
+					logrus.Errorf("Error loading CNI config list file %s: %v", confFile, err)
+				}
 				continue
 			}
 		} else {
 			conf, err := libcni.ConfFromFile(confFile)
 			if err != nil {
-				logrus.Errorf("Error loading CNI config file %s: %v", confFile, err)
+				// do not log ENOENT errors
+				if !os.IsNotExist(err) {
+					logrus.Errorf("Error loading CNI config file %s: %v", confFile, err)
+				}
 				continue
 			}
 			if conf.Network.Type == "" {
