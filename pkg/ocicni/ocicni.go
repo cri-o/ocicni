@@ -495,8 +495,15 @@ func (plugin *cniNetworkPlugin) forEachNetwork(podNetwork *PodNetwork, fromCache
 		if cniNet == nil {
 			cniNet, err = plugin.getNetwork(network.Name)
 			if err != nil {
-				logrus.Errorf(err.Error())
-				return err
+				// try to load the networks again
+				if err2 := plugin.syncNetworkConfig(); err2 != nil {
+					logrus.Error(err2)
+					return err
+				}
+				cniNet, err = plugin.getNetwork(network.Name)
+				if err != nil {
+					return err
+				}
 			}
 		}
 
