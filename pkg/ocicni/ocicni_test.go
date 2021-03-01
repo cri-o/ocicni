@@ -359,7 +359,6 @@ var _ = Describe("ocicni operations", func() {
 	})
 
 	It("build different runtime configs", func() {
-		cacheDir := "empty"
 		ifName := "eth0"
 		podNetwork := &PodNetwork{}
 
@@ -370,36 +369,36 @@ var _ = Describe("ocicni operations", func() {
 		)
 
 		// empty runtimeConfig
-		_, err = buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
+		_, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).NotTo(HaveOccurred())
 
 		// runtimeConfig with invalid IP
 		runtimeConfig = RuntimeConfig{IP: "172.16"}
-		_, err = buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
+		_, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).To(HaveOccurred())
 
 		// runtimeConfig with valid IP
 		runtimeConfig = RuntimeConfig{IP: "172.16.0.1"}
-		rt, err = buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
+		rt, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(rt.Args)).To(Equal(5))
 		Expect(rt.Args[4][1]).To(Equal("172.16.0.1"))
 
 		// runtimeConfig with invalid MAC
 		runtimeConfig = RuntimeConfig{MAC: "f0:a6"}
-		_, err = buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
+		_, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).To(HaveOccurred())
 
 		// runtimeConfig with valid MAC
 		runtimeConfig = RuntimeConfig{MAC: "9e:0c:d9:b2:f0:a6"}
-		rt, err = buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
+		rt, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(rt.Args)).To(Equal(5))
 		Expect(rt.Args[4][1]).To(Equal("9e:0c:d9:b2:f0:a6"))
 
 		// runtimeConfig with valid IP and valid MAC
 		runtimeConfig = RuntimeConfig{IP: "172.16.0.1", MAC: "9e:0c:d9:b2:f0:a6"}
-		rt, err = buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
+		rt, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(rt.Args)).To(Equal(6))
 		Expect(rt.Args[4][1]).To(Equal("172.16.0.1"))
@@ -407,7 +406,7 @@ var _ = Describe("ocicni operations", func() {
 
 		// runtimeConfig with portMappings is nil
 		runtimeConfig = RuntimeConfig{PortMappings: nil}
-		_, err = buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
+		_, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).NotTo(HaveOccurred())
 
 		// runtimeConfig with valid portMappings
@@ -417,7 +416,7 @@ var _ = Describe("ocicni operations", func() {
 			Protocol:      "tcp",
 			HostIP:        "192.168.0.1",
 		}}}
-		rt, err = buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
+		rt, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).NotTo(HaveOccurred())
 		pm, ok := rt.CapabilityArgs["portMappings"].([]PortMapping)
 		Expect(ok).To(Equal(true))
@@ -429,7 +428,7 @@ var _ = Describe("ocicni operations", func() {
 
 		// runtimeConfig with bandwidth is nil
 		runtimeConfig = RuntimeConfig{Bandwidth: nil}
-		_, err = buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
+		_, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).NotTo(HaveOccurred())
 
 		// runtimeConfig with valid bandwidth
@@ -439,7 +438,7 @@ var _ = Describe("ocicni operations", func() {
 			EgressRate:   3,
 			EgressBurst:  4,
 		}}
-		rt, err = buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
+		rt, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).NotTo(HaveOccurred())
 		bw, ok := rt.CapabilityArgs["bandwidth"].(map[string]uint64)
 		Expect(ok).To(Equal(true))
@@ -450,7 +449,7 @@ var _ = Describe("ocicni operations", func() {
 
 		// runtimeConfig with ipRanges is empty
 		runtimeConfig = RuntimeConfig{IpRanges: [][]IpRange{}}
-		_, err = buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
+		_, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).NotTo(HaveOccurred())
 
 		// runtimeConfig with valid ipRanges
@@ -460,7 +459,7 @@ var _ = Describe("ocicni operations", func() {
 			RangeEnd:   "192.168.0.200",
 			Gateway:    "192.168.0.254",
 		}}}}
-		rt, err = buildCNIRuntimeConf(cacheDir, podNetwork, ifName, runtimeConfig)
+		rt, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).NotTo(HaveOccurred())
 		ir, ok := rt.CapabilityArgs["ipRanges"].([][]IpRange)
 		Expect(ok).To(Equal(true))
