@@ -24,7 +24,6 @@ jobs:
           for arch in ${LINUX_ARCHES}; do
             echo "Building for arch $arch"
             GOARCH=$arch make
-            rm bin/*
           done
 
   test-linux:
@@ -41,13 +40,11 @@ jobs:
         env:
           GO111MODULE: off
         run: |
-          go get golang.org/x/tools/cmd/cover
           go get github.com/modocache/gover
           go get github.com/mattn/goveralls
-          go get -t ./...
 
       - name: test
-        run: PATH=$PATH:$(go env GOPATH)/bin COVERALLS=1 ./test_linux.sh
+        run: PATH=$PATH:$(go env GOPATH)/bin COVERALLS=1 make check
 
       - name: Send coverage to coveralls
         env:
