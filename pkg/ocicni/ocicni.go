@@ -810,7 +810,7 @@ func buildCNIRuntimeConf(podNetwork *PodNetwork, ifName string, runtimeConfig Ru
 	}
 
 	// Propagate existing CNI_ARGS to non-k8s consumers
-	for _, kvpairs := range strings.Split(os.Getenv("CNI_ARGS"), ";"){
+	for _, kvpairs := range strings.Split(os.Getenv("CNI_ARGS"), ";") {
 		if keyval := strings.SplitN(kvpairs, "=", 2); len(keyval) == 2 {
 			rt.Args = append(rt.Args, [2]string{keyval[0], keyval[1]})
 		}

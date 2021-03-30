@@ -16,8 +16,6 @@ if [ ! -z "${COVERALLS:-""}" ]; then
         testrun "-covermode set -coverprofile ${i}.coverprofile ${t}"
         i=$((i+1))
     done
-    gover
-    goveralls -service=travis-ci -coverprofile=gover.coverprofile
 else
     echo "without coverage profile generation..."
     testrun "./..."
