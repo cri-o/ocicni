@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	cnicurrent "github.com/containernetworking/cni/pkg/types/current"
+	cniv1 "github.com/containernetworking/cni/pkg/types/040"
 	"github.com/cri-o/ocicni/pkg/ocicni"
 )
 
@@ -25,21 +25,18 @@ const (
 
 func printSandboxResults(results []ocicni.NetResult) {
 	for _, r := range results {
-		result, _ := cnicurrent.NewResultFromResult(r.Result)
+		result, _ := cniv1.NewResultFromResult(r.Result)
 		if result != nil {
-			result030, _ := cnicurrent.GetResult(result)
-			if result030 != nil {
-				for _, ip := range result030.IPs {
-					intfDetails := ""
-					if ip.Interface != nil && *ip.Interface >= 0 && *ip.Interface < len(result030.Interfaces) {
-						intf := result030.Interfaces[*ip.Interface]
-						// Only print container sandbox interfaces (not host ones)
-						if intf.Sandbox != "" {
-							intfDetails = fmt.Sprintf(" (%s %s)", intf.Name, intf.Mac)
-						}
+			for _, ip := range result.IPs {
+				intfDetails := ""
+				if ip.Interface != nil && *ip.Interface >= 0 && *ip.Interface < len(result.Interfaces) {
+					intf := result.Interfaces[*ip.Interface]
+					// Only print container sandbox interfaces (not host ones)
+					if intf.Sandbox != "" {
+						intfDetails = fmt.Sprintf(" (%s %s)", intf.Name, intf.Mac)
 					}
-					fmt.Fprintf(os.Stdout, "IP: %s%s\n", ip.Address.String(), intfDetails)
 				}
+				fmt.Fprintf(os.Stdout, "IP: %s%s\n", ip.Address.String(), intfDetails)
 			}
 		}
 	}

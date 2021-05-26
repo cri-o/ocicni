@@ -16,7 +16,7 @@ import (
 
 	"github.com/containernetworking/cni/libcni"
 	"github.com/containernetworking/cni/pkg/types"
-	"github.com/containernetworking/cni/pkg/types/current"
+	cniv04 "github.com/containernetworking/cni/pkg/types/040"
 	"github.com/containernetworking/cni/pkg/version"
 	"github.com/containernetworking/plugins/pkg/ns"
 	"github.com/containernetworking/plugins/pkg/testutils"
@@ -78,7 +78,7 @@ type TestConf struct {
 	Type       string `json:"type,omitempty"`
 }
 
-func (f *fakeExec) addPlugin(expectedEnv []string, expectedConf string, result *current.Result, err error) {
+func (f *fakeExec) addPlugin(expectedEnv []string, expectedConf string, result types.Result, err error) {
 	f.plugins = append(f.plugins, &fakePlugin{
 		expectedEnv:  expectedEnv,
 		expectedConf: expectedConf,
@@ -473,18 +473,18 @@ var _ = Describe("ocicni operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		fake := &fakeExec{}
-		expectedResult := &current.Result{
+		expectedResult := &cniv04.Result{
 			CNIVersion: "0.3.1",
-			Interfaces: []*current.Interface{
+			Interfaces: []*cniv04.Interface{
 				{
 					Name:    "eth0",
 					Mac:     "01:23:45:67:89:01",
 					Sandbox: networkNS.Path(),
 				},
 			},
-			IPs: []*current.IPConfig{
+			IPs: []*cniv04.IPConfig{
 				{
-					Interface: current.Int(0),
+					Interface: cniv04.Int(0),
 					Version:   "4",
 					Address:   *ensureCIDR("1.1.1.2/24"),
 				},
@@ -505,7 +505,7 @@ var _ = Describe("ocicni operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(fake.addIndex).To(Equal(len(fake.plugins)))
 		Expect(len(results)).To(Equal(1))
-		r := results[0].Result.(*current.Result)
+		r := results[0].Result.(*cniv04.Result)
 		Expect(reflect.DeepEqual(r, expectedResult)).To(BeTrue())
 
 		// Make sure loopback device is up
@@ -535,18 +535,18 @@ var _ = Describe("ocicni operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		fake := &fakeExec{}
-		expectedResult1 := &current.Result{
+		expectedResult1 := &cniv04.Result{
 			CNIVersion: "0.3.1",
-			Interfaces: []*current.Interface{
+			Interfaces: []*cniv04.Interface{
 				{
 					Name:    "eth0",
 					Mac:     "01:23:45:67:89:01",
 					Sandbox: networkNS.Path(),
 				},
 			},
-			IPs: []*current.IPConfig{
+			IPs: []*cniv04.IPConfig{
 				{
-					Interface: current.Int(0),
+					Interface: cniv04.Int(0),
 					Version:   "4",
 					Address:   *ensureCIDR("1.1.1.2/24"),
 				},
@@ -554,19 +554,18 @@ var _ = Describe("ocicni operations", func() {
 		}
 		fake.addPlugin(nil, conf1, expectedResult1, nil)
 
-		expectedResult2 := &current.Result{
+		expectedResult2 := &cniv04.Result{
 			CNIVersion: "0.3.1",
-			Interfaces: []*current.Interface{
+			Interfaces: []*cniv04.Interface{
 				{
 					Name:    "eth1",
 					Mac:     "01:23:45:67:89:02",
 					Sandbox: networkNS.Path(),
 				},
 			},
-			IPs: []*current.IPConfig{
+			IPs: []*cniv04.IPConfig{
 				{
-					Interface: current.Int(0),
-					Version:   "4",
+					Interface: cniv04.Int(0),
 					Address:   *ensureCIDR("1.1.1.3/24"),
 				},
 			},
@@ -590,9 +589,9 @@ var _ = Describe("ocicni operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(fake.addIndex).To(Equal(len(fake.plugins)))
 		Expect(len(results)).To(Equal(2))
-		r := results[0].Result.(*current.Result)
+		r := results[0].Result.(*cniv04.Result)
 		Expect(reflect.DeepEqual(r, expectedResult1)).To(BeTrue())
-		r = results[1].Result.(*current.Result)
+		r = results[1].Result.(*cniv04.Result)
 		Expect(reflect.DeepEqual(r, expectedResult2)).To(BeTrue())
 
 		err = ocicni.TearDownPod(podNet)
@@ -612,18 +611,18 @@ var _ = Describe("ocicni operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		fake := &fakeExec{}
-		expectedResult1 := &current.Result{
+		expectedResult1 := &cniv04.Result{
 			CNIVersion: "0.4.0",
-			Interfaces: []*current.Interface{
+			Interfaces: []*cniv04.Interface{
 				{
 					Name:    "eth0",
 					Mac:     "01:23:45:67:89:01",
 					Sandbox: networkNS.Path(),
 				},
 			},
-			IPs: []*current.IPConfig{
+			IPs: []*cniv04.IPConfig{
 				{
-					Interface: current.Int(0),
+					Interface: cniv04.Int(0),
 					Version:   "4",
 					Address:   *ensureCIDR("1.1.1.2/24"),
 				},
@@ -631,18 +630,18 @@ var _ = Describe("ocicni operations", func() {
 		}
 		fake.addPlugin(nil, conf1, expectedResult1, nil)
 
-		expectedResult2 := &current.Result{
+		expectedResult2 := &cniv04.Result{
 			CNIVersion: "0.4.0",
-			Interfaces: []*current.Interface{
+			Interfaces: []*cniv04.Interface{
 				{
 					Name:    "eth1",
 					Mac:     "01:23:45:67:89:02",
 					Sandbox: networkNS.Path(),
 				},
 			},
-			IPs: []*current.IPConfig{
+			IPs: []*cniv04.IPConfig{
 				{
-					Interface: current.Int(0),
+					Interface: cniv04.Int(0),
 					Version:   "4",
 					Address:   *ensureCIDR("1.1.1.3/24"),
 				},
@@ -667,17 +666,17 @@ var _ = Describe("ocicni operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(fake.addIndex).To(Equal(len(fake.plugins)))
 		Expect(len(results)).To(Equal(2))
-		r := results[0].Result.(*current.Result)
+		r := results[0].Result.(*cniv04.Result)
 		Expect(reflect.DeepEqual(r, expectedResult1)).To(BeTrue())
-		r = results[1].Result.(*current.Result)
+		r = results[1].Result.(*cniv04.Result)
 		Expect(reflect.DeepEqual(r, expectedResult2)).To(BeTrue())
 
 		resultsStatus, errStatus := ocicni.GetPodNetworkStatus(podNet)
 		Expect(errStatus).NotTo(HaveOccurred())
 		Expect(len(resultsStatus)).To(Equal(2))
-		r = resultsStatus[0].Result.(*current.Result)
+		r = resultsStatus[0].Result.(*cniv04.Result)
 		Expect(reflect.DeepEqual(r, expectedResult1)).To(BeTrue())
-		r = resultsStatus[1].Result.(*current.Result)
+		r = resultsStatus[1].Result.(*cniv04.Result)
 		Expect(reflect.DeepEqual(r, expectedResult2)).To(BeTrue())
 
 		err = ocicni.TearDownPod(podNet)
