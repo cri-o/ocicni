@@ -805,6 +805,7 @@ func buildCNIRuntimeConf(podNetwork *PodNetwork, ifName string, runtimeConfig Ru
 			{"K8S_POD_NAMESPACE", podNetwork.Namespace},
 			{"K8S_POD_NAME", podNetwork.Name},
 			{"K8S_POD_INFRA_CONTAINER_ID", podNetwork.ID},
+			{"K8S_POD_UID", podNetwork.UID},
 		},
 		CapabilityArgs: map[string]interface{}{},
 	}

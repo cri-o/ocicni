@@ -381,8 +381,8 @@ var _ = Describe("ocicni operations", func() {
 		runtimeConfig = RuntimeConfig{IP: "172.16.0.1"}
 		rt, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(len(rt.Args)).To(Equal(5))
-		Expect(rt.Args[4][1]).To(Equal("172.16.0.1"))
+		Expect(len(rt.Args)).To(Equal(6))
+		Expect(rt.Args[5][1]).To(Equal("172.16.0.1"))
 
 		// runtimeConfig with invalid MAC
 		runtimeConfig = RuntimeConfig{MAC: "f0:a6"}
@@ -393,16 +393,16 @@ var _ = Describe("ocicni operations", func() {
 		runtimeConfig = RuntimeConfig{MAC: "9e:0c:d9:b2:f0:a6"}
 		rt, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(len(rt.Args)).To(Equal(5))
-		Expect(rt.Args[4][1]).To(Equal("9e:0c:d9:b2:f0:a6"))
+		Expect(len(rt.Args)).To(Equal(6))
+		Expect(rt.Args[5][1]).To(Equal("9e:0c:d9:b2:f0:a6"))
 
 		// runtimeConfig with valid IP and valid MAC
 		runtimeConfig = RuntimeConfig{IP: "172.16.0.1", MAC: "9e:0c:d9:b2:f0:a6"}
 		rt, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).NotTo(HaveOccurred())
-		Expect(len(rt.Args)).To(Equal(6))
-		Expect(rt.Args[4][1]).To(Equal("172.16.0.1"))
-		Expect(rt.Args[5][1]).To(Equal("9e:0c:d9:b2:f0:a6"))
+		Expect(len(rt.Args)).To(Equal(7))
+		Expect(rt.Args[5][1]).To(Equal("172.16.0.1"))
+		Expect(rt.Args[6][1]).To(Equal("9e:0c:d9:b2:f0:a6"))
 
 		// runtimeConfig with portMappings is nil
 		runtimeConfig = RuntimeConfig{PortMappings: nil}
@@ -499,6 +499,7 @@ var _ = Describe("ocicni operations", func() {
 			Name:      "pod1",
 			Namespace: "namespace1",
 			ID:        "1234567890",
+			UID:       "9414bd03-b3d3-453e-9d9f-47dcee07958c",
 			NetNS:     networkNS.Path(),
 		}
 		results, err := ocicni.SetUpPod(podNet)
@@ -580,6 +581,7 @@ var _ = Describe("ocicni operations", func() {
 			Name:      "pod1",
 			Namespace: "namespace1",
 			ID:        "1234567890",
+			UID:       "9414bd03-b3d3-453e-9d9f-47dcee07958c",
 			NetNS:     networkNS.Path(),
 			Networks: []NetAttachment{
 				{Name: "network3"},
@@ -657,6 +659,7 @@ var _ = Describe("ocicni operations", func() {
 			Name:      "pod1",
 			Namespace: "namespace1",
 			ID:        "1234567890",
+			UID:       "9414bd03-b3d3-453e-9d9f-47dcee07958c",
 			NetNS:     networkNS.Path(),
 			Networks: []NetAttachment{
 				{Name: "network3"},
@@ -732,6 +735,7 @@ var _ = Describe("ocicni operations", func() {
 				Name:      "pod1",
 				Namespace: "namespace1",
 				ID:        containerID,
+				UID:       "9414bd03-b3d3-453e-9d9f-47dcee07958c",
 				NetNS:     networkNS.Path(),
 			}
 		})
@@ -798,6 +802,7 @@ var _ = Describe("ocicni operations", func() {
 			Name:      "pod1",
 			Namespace: "namespace1",
 			ID:        containerID,
+			UID:       "9414bd03-b3d3-453e-9d9f-47dcee07958c",
 			NetNS:     networkNS.Path(),
 			Networks: []NetAttachment{
 				{Name: netName1},
