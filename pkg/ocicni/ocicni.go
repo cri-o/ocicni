@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/containernetworking/cni/libcni"
 	cniinvoke "github.com/containernetworking/cni/pkg/invoke"
@@ -65,7 +66,7 @@ var errMissingDefaultNetwork = "No CNI configuration file in %s. Has your networ
 type podLock struct {
 	// Count of in-flight operations for this pod; when this reaches zero
 	// the lock can be removed from the pod map
-	refcount uint
+	refcount uint32
 
 	// Lock to synchronize operations for this specific pod
 	mu sync.Mutex
@@ -81,14 +82,13 @@ func buildFullPodName(podNetwork PodNetwork) string {
 func (plugin *cniNetworkPlugin) podLock(podNetwork PodNetwork) *sync.Mutex {
 	plugin.podsLock.Lock()
 	defer plugin.podsLock.Unlock()
-
 	fullPodName := buildFullPodName(podNetwork)
 	lock, ok := plugin.pods[fullPodName]
 	if !ok {
 		lock = &podLock{}
 		plugin.pods[fullPodName] = lock
 	}
-	lock.refcount++
+	atomic.AddUint32(&lock.refcount, 1)
 	return &lock.mu
 }
 
@@ -104,17 +104,12 @@ func (plugin *cniNetworkPlugin) podUnlock(podNetwork PodNetwork) {
 	if !ok {
 		logrus.Errorf("Cannot find reference in refcount map for %s. Refcount cannot be determined.", fullPodName)
 		return
-	} else if lock.refcount == 0 {
-		// This should never ever happen, but handle it anyway
-		delete(plugin.pods, fullPodName)
-		logrus.Errorf("Pod lock for %s still in map with zero refcount", fullPodName)
-		return
 	}
-	lock.refcount--
+	// decrement ref
+	if atomic.AddUint32(&lock.refcount, ^uint32(0)) == 0 {
+		delete(plugin.pods, fullPodName)
+	}
 	lock.mu.Unlock()
-	if lock.refcount == 0 {
-		delete(plugin.pods, fullPodName)
-	}
 }
 
 func newWatcher(confDir string) (*fsnotify.Watcher, error) {
