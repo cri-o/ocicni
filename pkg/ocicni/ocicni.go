@@ -195,16 +195,21 @@ func (plugin *cniNetworkPlugin) monitorConfDir(start *sync.WaitGroup) {
 // If defaultNetName is empty, CNI config files should be reloaded real-time and
 // defaultNetName should be changeable and determined by file sorting.
 func InitCNI(defaultNetName string, confDir string, binDirs ...string) (CNIPlugin, error) {
-	return initCNI(nil, "", defaultNetName, confDir, binDirs...)
+	return initCNI(nil, "", defaultNetName, confDir, true, binDirs...)
 }
 
 // InitCNIWithCache works like InitCNI except that it takes the cni cache directory as third param.
 func InitCNIWithCache(defaultNetName, confDir, cacheDir string, binDirs ...string) (CNIPlugin, error) {
-	return initCNI(nil, cacheDir, defaultNetName, confDir, binDirs...)
+	return initCNI(nil, cacheDir, defaultNetName, confDir, true, binDirs...)
+}
+
+// InitCNINoInotify works like InitCNI except that it does not use inotify to watch for changes in the CNI config dir.
+func InitCNINoInotify(defaultNetName, confDir, cacheDir string, binDirs ...string) (CNIPlugin, error) {
+	return initCNI(nil, cacheDir, defaultNetName, confDir, false, binDirs...)
 }
 
 // Internal function to allow faking out exec functions for testing
-func initCNI(exec cniinvoke.Exec, cacheDir, defaultNetName string, confDir string, binDirs ...string) (CNIPlugin, error) {
+func initCNI(exec cniinvoke.Exec, cacheDir, defaultNetName string, confDir string, useInotify bool, binDirs ...string) (CNIPlugin, error) {
 	if confDir == "" {
 		confDir = DefaultConfDir
 	}
@@ -245,22 +250,26 @@ func initCNI(exec cniinvoke.Exec, cacheDir, defaultNetName string, confDir strin
 
 	plugin.syncNetworkConfig()
 
-	plugin.watcher, err = newWatcher(plugin.confDir)
-	if err != nil {
-		return nil, err
-	}
+	if useInotify {
+		plugin.watcher, err = newWatcher(plugin.confDir)
+		if err != nil {
+			return nil, err
+		}
 
-	startWg := sync.WaitGroup{}
-	startWg.Add(1)
-	go plugin.monitorConfDir(&startWg)
-	startWg.Wait()
+		startWg := sync.WaitGroup{}
+		startWg.Add(1)
+		go plugin.monitorConfDir(&startWg)
+		startWg.Wait()
+	}
 
 	return plugin, nil
 }
 
 func (plugin *cniNetworkPlugin) Shutdown() error {
 	close(plugin.shutdownChan)
-	plugin.watcher.Close()
+	if plugin.watcher != nil {
+		plugin.watcher.Close()
+	}
 	plugin.done.Wait()
 	return nil
 }
