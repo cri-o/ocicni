@@ -15,7 +15,7 @@ github.com/containernetworking/cni/pkg/version
 ## explicit; go 1.17
 github.com/containernetworking/plugins/pkg/ns
 github.com/containernetworking/plugins/pkg/testutils
-# github.com/fsnotify/fsnotify v1.5.1
+# github.com/fsnotify/fsnotify v1.5.3
 ## explicit; go 1.13
 github.com/fsnotify/fsnotify
 # github.com/onsi/ginkgo/v2 v2.1.3
