@@ -658,11 +658,6 @@ func (plugin *cniNetworkPlugin) TearDownPodWithContext(ctx context.Context, podN
 	plugin.podLock(podNetwork).Lock()
 	defer plugin.podUnlock(podNetwork)
 
-	if err := tearDownLoopback(podNetwork.NetNS); err != nil {
-		// ignore error
-		logrus.Warningf("Ignoring error tearing down loopback interface: %v", err)
-	}
-
 	return plugin.forEachNetwork(&podNetwork, true, func(network *cniNetwork, podNetwork *PodNetwork, rt *libcni.RuntimeConf) error {
 		fullPodName := buildFullPodName(*podNetwork)
 		logrus.Infof("Deleting pod %s from CNI network %q (type=%v)", fullPodName, network.name, network.config.Plugins[0].Network.Type)
