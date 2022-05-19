@@ -552,6 +552,10 @@ func (plugin *cniNetworkPlugin) SetUpPodWithContext(ctx context.Context, podNetw
 		logrus.Infof("Adding pod %s to CNI network %q (type=%v)", fullPodName, network.name, network.config.Plugins[0].Network.Type)
 		result, err := network.addToNetwork(ctx, rt, plugin.cniConfig)
 		if err != nil {
+			logrus.Errorf("!sandboxdebug network.config: %+v", network.config)
+			logrus.Errorf("!sandboxdebug network type: %s", network.config.Plugins[0].Network.Type)
+			logrus.Errorf("!sandboxdebug fullpodname: %+v", fullPodName)
+			logrus.Errorf("!sandboxdebug error: %+v", err)
 			return fmt.Errorf("error adding pod %s to CNI network %q: %v", fullPodName, network.name, err)
 		}
 		results = append(results, NetResult{
