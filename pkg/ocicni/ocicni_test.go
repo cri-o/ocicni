@@ -70,6 +70,8 @@ type fakeExec struct {
 	delIndex int
 	chkIndex int
 	plugins  []*fakePlugin
+
+	failFind bool
 }
 
 type TestConf struct {
@@ -167,6 +169,10 @@ func (f *fakeExec) ExecPlugin(ctx context.Context, pluginPath string, stdinData 
 
 func (f *fakeExec) FindInPath(plugin string, paths []string) (string, error) {
 	Expect(len(paths)).To(BeNumerically(">", 0))
+
+	if f.failFind {
+		return "", fmt.Errorf("failed to find plugin %q in path %s", plugin, paths)
+	}
 	return filepath.Join(paths[0], plugin), nil
 }
 
@@ -180,6 +186,7 @@ func ensureCIDR(cidr string) *net.IPNet {
 var _ = Describe("ocicni operations", func() {
 	var (
 		tmpDir    string
+		tmpBinDir string
 		cacheDir  string
 		networkNS ns.NetNS
 	)
@@ -187,6 +194,8 @@ var _ = Describe("ocicni operations", func() {
 	BeforeEach(func() {
 		var err error
 		tmpDir, err = ioutil.TempDir("", "ocicni_tmp")
+		Expect(err).NotTo(HaveOccurred())
+		tmpBinDir, err = ioutil.TempDir("", "ocicni_tmp_bin")
 		Expect(err).NotTo(HaveOccurred())
 		cacheDir, err = ioutil.TempDir("", "ocicni_cache")
 		Expect(err).NotTo(HaveOccurred())
@@ -200,6 +209,8 @@ var _ = Describe("ocicni operations", func() {
 		Expect(testutils.UnmountNS(networkNS)).To(Succeed())
 
 		err := os.RemoveAll(tmpDir)
+		Expect(err).NotTo(HaveOccurred())
+		err = os.RemoveAll(tmpBinDir)
 		Expect(err).NotTo(HaveOccurred())
 		err = os.RemoveAll(cacheDir)
 		Expect(err).NotTo(HaveOccurred())
@@ -243,6 +254,41 @@ var _ = Describe("ocicni operations", func() {
 		Expect(net.name).To(Equal("test"))
 		Expect(len(net.config.Plugins)).To(BeNumerically(">", 0))
 		Expect(net.config.Plugins[0].Network.Type).To(Equal("myplugin"))
+
+		ocicni.Shutdown()
+	})
+
+	It("finds an asynchronously written default network configuration whose plugin is written later", func() {
+		fExec := &fakeExec{failFind: true}
+		ocicni, err := initCNI(fExec, "", "test", tmpDir, true, tmpBinDir)
+		Expect(err).NotTo(HaveOccurred())
+
+		_, _, err = writeConfig(tmpDir, "10-test.conf", "test", "myplugin", "0.3.1")
+		Expect(err).NotTo(HaveOccurred())
+		Consistently(ocicni.Status, 5).ShouldNot(Succeed())
+
+		// Write a file in the bindir to trigger the fsnotify code to resync
+		fExec.failFind = false
+		err = ioutil.WriteFile(filepath.Join(tmpBinDir, "myplugin"), []byte("adsfasdfsafd"), 0755)
+		Expect(err).NotTo(HaveOccurred())
+
+		tmp := ocicni.(*cniNetworkPlugin)
+		Eventually(func() error {
+			net := tmp.getDefaultNetwork()
+			if net == nil {
+				return fmt.Errorf("no default net")
+			}
+			if net.name != "test" {
+				return fmt.Errorf("name not test")
+			}
+			if len(net.config.Plugins) == 0 {
+				return fmt.Errorf("no plugins")
+			}
+			if net.config.Plugins[0].Network.Type != "myplugin" {
+				return fmt.Errorf("wrong plugin type")
+			}
+			return nil
+		}, 10).Should(Succeed())
 
 		ocicni.Shutdown()
 	})
