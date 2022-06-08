@@ -773,7 +773,7 @@ func (network *cniNetwork) checkNetwork(ctx context.Context, rt *libcni.RuntimeC
 	}
 
 	result = &cniv1.Result{
-		CNIVersion: network.config.CNIVersion,
+		CNIVersion: cniv1.ImplementedSpecVersion,
 		Interfaces: []*cniv1.Interface{cniInterface},
 		IPs:        ips,
 	}
