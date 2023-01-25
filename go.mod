@@ -4,12 +4,12 @@ go 1.17
 
 require (
 	github.com/containernetworking/cni v1.1.2
-	github.com/containernetworking/plugins v1.1.1
+	github.com/containernetworking/plugins v1.2.0
 	github.com/fsnotify/fsnotify v1.6.0
 	github.com/onsi/ginkgo/v2 v2.7.0
 	github.com/onsi/gomega v1.26.0
 	github.com/sirupsen/logrus v1.9.0
-	github.com/vishvananda/netlink v1.1.1-0.20210811191823-e1a867c6b452
+	github.com/vishvananda/netlink v1.2.1-beta.2
 )
 
 require (
