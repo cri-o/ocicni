@@ -512,6 +512,13 @@ var _ = Describe("ocicni operations", func() {
 		Expect(len(ir)).To(Equal(1))
 		Expect(len(ir[0])).To(Equal(1))
 		Expect(ir[0][0].Gateway).To(Equal("192.168.0.254"))
+
+		runtimeConfig = RuntimeConfig{CgroupPath: "/slice/pod/testing"}
+		rt, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
+		Expect(err).NotTo(HaveOccurred())
+		cg, ok := rt.CapabilityArgs["cgroupPath"].(string)
+		Expect(ok).To(Equal(true))
+		Expect(cg).To(Equal("/slice/pod/testing"))
 	})
 
 	It("sets up and tears down a pod using the default network", func() {
