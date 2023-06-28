@@ -155,9 +155,9 @@ func (plugin *cniNetworkPlugin) monitorConfDir(start *sync.WaitGroup) {
 			logrus.Infof("CNI monitoring event %v", event)
 
 			var defaultDeleted bool
-			createWriteRename := (event.Op&fsnotify.Create == fsnotify.Create ||
+			createWriteRename := event.Op&fsnotify.Create == fsnotify.Create ||
 				event.Op&fsnotify.Write == fsnotify.Write ||
-				event.Op&fsnotify.Rename > 0)
+				event.Op&fsnotify.Rename == fsnotify.Rename
 			if event.Op&fsnotify.Remove == fsnotify.Remove {
 				// Care about the event if the default network
 				// was just deleted
