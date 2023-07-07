@@ -864,6 +864,11 @@ func buildCNIRuntimeConf(podNetwork *PodNetwork, ifName string, runtimeConfig Ru
 		rt.CapabilityArgs["cgroupPath"] = runtimeConfig.CgroupPath
 	}
 
+	// Set PodAnnotations in Capabilities
+	if runtimeConfig.PodAnnotations != nil {
+		rt.CapabilityArgs["io.kubernetes.cri.pod-annotations"] = runtimeConfig.PodAnnotations
+	}
+
 	return rt, nil
 }
 
