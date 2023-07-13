@@ -293,6 +293,68 @@ var _ = Describe("ocicni operations", func() {
 		ocicni.Shutdown()
 	})
 
+	It("should monitor the net conf dir for changes when default network is not specified", func() {
+		_, _, err := writeConfig(tmpDir, "5-notdefault.conf", "notdefault", "myplugin", "0.3.1")
+		Expect(err).NotTo(HaveOccurred())
+		_, _, err = writeConfig(tmpDir, "10-test.conf", "test", "myplugin", "0.3.1")
+		Expect(err).NotTo(HaveOccurred())
+
+		ocicni, err := initCNI(&fakeExec{}, "", "", tmpDir, true, "/opt/cni/bin")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ocicni.Status()).NotTo(HaveOccurred())
+
+		// Ensure the default network is the one we expect
+		tmp := ocicni.(*cniNetworkPlugin)
+		net := tmp.getDefaultNetwork()
+		Expect(net.name).To(Equal("test"))
+		Expect(len(net.config.Plugins)).To(BeNumerically(">", 0))
+		Expect(net.config.Plugins[0].Network.Type).To(Equal("myplugin"))
+
+		// If a CNI config file is updated, default network name should be reloaded real-time
+		_, _, err = writeConfig(tmpDir, "10-test.conf", "secondary", "testplugin", "0.3.1")
+		Expect(err).NotTo(HaveOccurred())
+
+		Consistently(ocicni.Status, 5).Should(Succeed())
+
+		net = tmp.getDefaultNetwork()
+		Expect(net.name).To(Equal("secondary"))
+		Expect(len(net.config.Plugins)).To(BeNumerically(">", 0))
+		Expect(net.config.Plugins[0].Network.Type).To(Equal("testplugin"))
+
+		ocicni.Shutdown()
+	})
+
+	It("should monitor the net conf dir for changes when default network is specified", func() {
+		_, _, err := writeConfig(tmpDir, "5-notdefault.conf", "notdefault", "myplugin", "0.3.1")
+		Expect(err).NotTo(HaveOccurred())
+		_, _, err = writeConfig(tmpDir, "10-test.conf", "test", "myplugin", "0.3.1")
+		Expect(err).NotTo(HaveOccurred())
+
+		ocicni, err := initCNI(&fakeExec{}, "", "test", tmpDir, true, "/opt/cni/bin")
+		Expect(err).NotTo(HaveOccurred())
+		Expect(ocicni.Status()).NotTo(HaveOccurred())
+
+		// Ensure the default network is the one we expect
+		tmp := ocicni.(*cniNetworkPlugin)
+		net := tmp.getDefaultNetwork()
+		Expect(net.name).To(Equal("test"))
+		Expect(len(net.config.Plugins)).To(BeNumerically(">", 0))
+		Expect(net.config.Plugins[0].Network.Type).To(Equal("myplugin"))
+
+		// If a CNI config file is updated, default network name should be reloaded real-time
+		_, _, err = writeConfig(tmpDir, "10-test.conf", "test", "testplugin", "0.3.1")
+		Expect(err).NotTo(HaveOccurred())
+
+		Consistently(ocicni.Status, 5).Should(Succeed())
+
+		net = tmp.getDefaultNetwork()
+		Expect(net.name).To(Equal("test"))
+		Expect(len(net.config.Plugins)).To(BeNumerically(">", 0))
+		Expect(net.config.Plugins[0].Network.Type).To(Equal("testplugin"))
+
+		ocicni.Shutdown()
+	})
+
 	It("finds and refinds an asynchronously written default network configuration", func() {
 		ocicni, err := initCNI(&fakeExec{}, "", "test", tmpDir, true, "/opt/cni/bin")
 		Expect(err).NotTo(HaveOccurred())
