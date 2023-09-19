@@ -15,9 +15,6 @@ const (
 	EnvBinDir  = "BIN_PATH"
 	EnvConfDir = "CONF_PATH"
 
-	DefaultConfDir = "/etc/cni/net.d"
-	DefaultBinDir  = "/opt/cni/bin"
-
 	CmdAdd    = "add"
 	CmdStatus = "status"
 	CmdDel    = "del"
@@ -68,11 +65,11 @@ func main() {
 
 	confdir := os.Getenv(EnvConfDir)
 	if confdir == "" {
-		confdir = DefaultConfDir
+		confdir = ocicni.DefaultConfDir
 	}
 	bindir := os.Getenv(EnvBinDir)
 	if bindir == "" {
-		bindir = DefaultBinDir
+		bindir = ocicni.DefaultBinDir
 	}
 
 	plugin, err := ocicni.InitCNI("", confdir, bindir)
