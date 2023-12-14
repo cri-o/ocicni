@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # $1 - base path of the source tree
 # $2 - subpath under $1 to find *.go dependencies for
