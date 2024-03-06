@@ -457,7 +457,7 @@ func (plugin *cniNetworkPlugin) loadNetworkFromCache(name string, rt *libcni.Run
 
 type forEachNetworkFn func(*cniNetwork, *PodNetwork, *libcni.RuntimeConf) error
 
-func (plugin *cniNetworkPlugin) forEachNetwork(podNetwork *PodNetwork, fromCache bool, actionFn forEachNetworkFn) error {
+func (plugin *cniNetworkPlugin) forEachNetwork(podNetwork *PodNetwork, fromCache bool, actionFn forEachNetworkFn, force bool) error {
 	networks := podNetwork.Networks
 	if len(networks) == 0 {
 		networks = append(networks, NetAttachment{
@@ -470,6 +470,9 @@ func (plugin *cniNetworkPlugin) forEachNetwork(podNetwork *PodNetwork, fromCache
 		if req.Ifname != "" {
 			// Make sure the requested name isn't already assigned
 			if allIfNames[req.Ifname] {
+				if force {
+					continue
+				}
 				return fmt.Errorf("network %q requested interface name %q already assigned", req.Name, req.Ifname)
 			}
 			allIfNames[req.Ifname] = true
@@ -495,6 +498,9 @@ func (plugin *cniNetworkPlugin) forEachNetwork(podNetwork *PodNetwork, fromCache
 		rt, err := buildCNIRuntimeConf(podNetwork, ifName, podNetwork.RuntimeConfig[network.Name])
 		if err != nil {
 			logrus.Errorf("error building CNI runtime config: %v", err)
+			if force {
+				continue
+			}
 			return err
 		}
 
@@ -516,16 +522,25 @@ func (plugin *cniNetworkPlugin) forEachNetwork(podNetwork *PodNetwork, fromCache
 				// try to load the networks again
 				if err2 := plugin.syncNetworkConfig(); err2 != nil {
 					logrus.Error(err2)
+					if force {
+						continue
+					}
 					return err
 				}
 				cniNet, err = plugin.getNetwork(network.Name)
 				if err != nil {
+					if force {
+						continue
+					}
 					return err
 				}
 			}
 		}
 
 		if err := actionFn(cniNet, podNetwork, rt); err != nil {
+			if force {
+				continue
+			}
 			return err
 		}
 	}
@@ -566,7 +581,7 @@ func (plugin *cniNetworkPlugin) SetUpPodWithContext(ctx context.Context, podNetw
 			},
 		})
 		return nil
-	}); err != nil {
+	}, false); err != nil {
 		return nil, err
 	}
 
@@ -669,7 +684,7 @@ func (plugin *cniNetworkPlugin) TearDownPodWithContext(ctx context.Context, podN
 			return fmt.Errorf("error removing pod %s from CNI network %q: %v", fullPodName, network.name, err)
 		}
 		return nil
-	})
+	}, true)
 }
 
 // GetPodNetworkStatus returns IP addressing and interface details for all
@@ -707,7 +722,7 @@ func (plugin *cniNetworkPlugin) GetPodNetworkStatusWithContext(ctx context.Conte
 			})
 		}
 		return nil
-	}); err != nil {
+	}, false); err != nil {
 		return nil, err
 	}
 
