@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net"
 	"os"
 	"path/filepath"
@@ -32,7 +31,7 @@ func writeConfig(dir, fileName, netName, plugin string, version string) (string,
 	"type": "%s",
 	"cniVersion": "%s"
 }`, netName, plugin, version)
-	return conf, confPath, ioutil.WriteFile(confPath, []byte(conf), 0644)
+	return conf, confPath, os.WriteFile(confPath, []byte(conf), 0644)
 }
 
 func writeCacheFile(dir, containerID, netName, ifname, config string) {
@@ -52,7 +51,7 @@ func writeCacheFile(dir, containerID, netName, ifname, config string) {
 	Expect(err).NotTo(HaveOccurred())
 
 	filePath := filepath.Join(dirName, fmt.Sprintf("%s-%s-%s", netName, containerID, ifname))
-	err = ioutil.WriteFile(filePath, []byte(cachedData), 0644)
+	err = os.WriteFile(filePath, []byte(cachedData), 0644)
 	Expect(err).NotTo(HaveOccurred())
 }
 
@@ -146,7 +145,10 @@ func (f *fakeExec) ExecPlugin(ctx context.Context, pluginPath string, stdinData 
 	// SetUpPod We only care about a few fields
 	testConf := &TestConf{}
 	err = json.Unmarshal(stdinData, &testConf)
+	Expect(err).NotTo(HaveOccurred())
+
 	testData, err := json.Marshal(testConf)
+	Expect(err).NotTo(HaveOccurred())
 	if plugin.expectedConf != "" {
 		Expect(string(testData)).To(MatchJSON(plugin.expectedConf))
 	}
@@ -193,11 +195,11 @@ var _ = Describe("ocicni operations", func() {
 
 	BeforeEach(func() {
 		var err error
-		tmpDir, err = ioutil.TempDir("", "ocicni_tmp")
+		tmpDir, err = os.MkdirTemp("", "ocicni_tmp")
 		Expect(err).NotTo(HaveOccurred())
-		tmpBinDir, err = ioutil.TempDir("", "ocicni_tmp_bin")
+		tmpBinDir, err = os.MkdirTemp("", "ocicni_tmp_bin")
 		Expect(err).NotTo(HaveOccurred())
-		cacheDir, err = ioutil.TempDir("", "ocicni_cache")
+		cacheDir, err = os.MkdirTemp("", "ocicni_cache")
 		Expect(err).NotTo(HaveOccurred())
 
 		networkNS, err = testutils.NewNS()
@@ -233,7 +235,7 @@ var _ = Describe("ocicni operations", func() {
 		Expect(len(net.config.Plugins)).To(BeNumerically(">", 0))
 		Expect(net.config.Plugins[0].Network.Type).To(Equal("myplugin"))
 
-		ocicni.Shutdown()
+		Expect(ocicni.Shutdown()).NotTo(HaveOccurred())
 	})
 
 	It("finds an asynchronously written default network configuration", func() {
@@ -255,7 +257,7 @@ var _ = Describe("ocicni operations", func() {
 		Expect(len(net.config.Plugins)).To(BeNumerically(">", 0))
 		Expect(net.config.Plugins[0].Network.Type).To(Equal("myplugin"))
 
-		ocicni.Shutdown()
+		Expect(ocicni.Shutdown()).NotTo(HaveOccurred())
 	})
 
 	It("finds an asynchronously written default network configuration whose plugin is written later", func() {
@@ -269,7 +271,7 @@ var _ = Describe("ocicni operations", func() {
 
 		// Write a file in the bindir to trigger the fsnotify code to resync
 		fExec.failFind = false
-		err = ioutil.WriteFile(filepath.Join(tmpBinDir, "myplugin"), []byte("adsfasdfsafd"), 0755)
+		err = os.WriteFile(filepath.Join(tmpBinDir, "myplugin"), []byte("adsfasdfsafd"), 0755)
 		Expect(err).NotTo(HaveOccurred())
 
 		tmp := ocicni.(*cniNetworkPlugin)
@@ -290,7 +292,7 @@ var _ = Describe("ocicni operations", func() {
 			return nil
 		}, 10).Should(Succeed())
 
-		ocicni.Shutdown()
+		Expect(ocicni.Shutdown()).NotTo(HaveOccurred())
 	})
 
 	It("should monitor the net conf dir for changes when default network is not specified", func() {
@@ -321,7 +323,7 @@ var _ = Describe("ocicni operations", func() {
 		Expect(len(net.config.Plugins)).To(BeNumerically(">", 0))
 		Expect(net.config.Plugins[0].Network.Type).To(Equal("testplugin"))
 
-		ocicni.Shutdown()
+		Expect(ocicni.Shutdown()).NotTo(HaveOccurred())
 	})
 
 	It("should monitor the net conf dir for changes when default network is specified", func() {
@@ -352,7 +354,7 @@ var _ = Describe("ocicni operations", func() {
 		Expect(len(net.config.Plugins)).To(BeNumerically(">", 0))
 		Expect(net.config.Plugins[0].Network.Type).To(Equal("testplugin"))
 
-		ocicni.Shutdown()
+		Expect(ocicni.Shutdown()).NotTo(HaveOccurred())
 	})
 
 	It("finds and refinds an asynchronously written default network configuration", func() {
@@ -382,7 +384,7 @@ var _ = Describe("ocicni operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(ocicni.Status, 5).Should(Succeed())
 
-		ocicni.Shutdown()
+		Expect(ocicni.Shutdown()).NotTo(HaveOccurred())
 	})
 
 	It("finds an ASCIIbetically first network configuration as default real-time if given no default network name", func() {
@@ -414,7 +416,7 @@ var _ = Describe("ocicni operations", func() {
 		Expect(len(net.config.Plugins)).To(BeNumerically(">", 0))
 		Expect(net.config.Plugins[0].Network.Type).To(Equal("myplugin"))
 
-		ocicni.Shutdown()
+		Expect(ocicni.Shutdown()).NotTo(HaveOccurred())
 	})
 
 	It("returns correct default network from loadNetworks()", func() {
@@ -638,7 +640,7 @@ var _ = Describe("ocicni operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(fake.delIndex).To(Equal(len(fake.plugins)))
 
-		ocicni.Shutdown()
+		Expect(ocicni.Shutdown()).NotTo(HaveOccurred())
 	})
 
 	It("sets up and tears down a pod using specified networks", func() {
@@ -715,7 +717,7 @@ var _ = Describe("ocicni operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(fake.delIndex).To(Equal(len(fake.plugins)))
 
-		ocicni.Shutdown()
+		Expect(ocicni.Shutdown()).NotTo(HaveOccurred())
 	})
 
 	It("sets up and tears down a pod using specified v4 networks", func() {
@@ -801,7 +803,7 @@ var _ = Describe("ocicni operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(fake.delIndex).To(Equal(len(fake.plugins)))
 
-		ocicni.Shutdown()
+		Expect(ocicni.Shutdown()).NotTo(HaveOccurred())
 	})
 
 	Context("when tearing down a pod using cached info", func() {
@@ -855,7 +857,7 @@ var _ = Describe("ocicni operations", func() {
 		})
 
 		AfterEach(func() {
-			ocicni.Shutdown()
+			Expect(ocicni.Shutdown()).NotTo(HaveOccurred())
 		})
 
 		It("uses the specified networks", func() {
@@ -910,7 +912,7 @@ var _ = Describe("ocicni operations", func() {
 
 		ocicni, err := initCNI(fake, cacheDir, defaultNetName, tmpDir, true, "/opt/cni/bin")
 		Expect(err).NotTo(HaveOccurred())
-		defer ocicni.Shutdown()
+		defer Expect(ocicni.Shutdown()).NotTo(HaveOccurred())
 
 		podNet := PodNetwork{
 			Name:      "pod1",
