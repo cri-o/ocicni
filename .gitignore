@@ -1,5 +1,7 @@
+/build
 /_output/
 *.o
 *.orig
 ocicnitool
 *.coverprofile
+*.test

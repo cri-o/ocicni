@@ -4,7 +4,7 @@ name: test
 on: ["push", "pull_request"]
 
 env:
-  GO_VERSION: "1.20"
+  GO_VERSION: "1.22"
   LINUX_ARCHES: "amd64 386 arm arm64 s390x mips64le ppc64le"
 
 jobs:
@@ -37,11 +37,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install test binaries
-        env:
-          GO111MODULE: off
         run: |
-          go get github.com/modocache/gover
-          go get github.com/mattn/goveralls
+          go install github.com/modocache/gover@latest
+          go install github.com/mattn/goveralls@latest
 
       - name: test
         run: PATH=$PATH:$(go env GOPATH)/bin COVERALLS=1 make check
@@ -53,3 +51,11 @@ jobs:
           PATH=$PATH:$(go env GOPATH)/bin
           gover
           goveralls -coverprofile=gover.coverprofile -service=github
+
+  lint:
+    name: Run golangci-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+      - run: make lint

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -24,14 +25,14 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func writeConfig(dir, fileName, netName, plugin string, version string) (string, string, error) {
-	confPath := filepath.Join(dir, fileName)
-	conf := fmt.Sprintf(`{
+func writeConfig(dir, fileName, netName, plugin, vers string) (conf, confPath string, err error) {
+	confPath = filepath.Join(dir, fileName)
+	conf = fmt.Sprintf(`{
 	"name": "%s",
 	"type": "%s",
 	"cniVersion": "%s"
-}`, netName, plugin, version)
-	return conf, confPath, os.WriteFile(confPath, []byte(conf), 0644)
+}`, netName, plugin, vers)
+	return conf, confPath, os.WriteFile(confPath, []byte(conf), 0o644)
 }
 
 func writeCacheFile(dir, containerID, netName, ifname, config string) {
@@ -47,11 +48,11 @@ func writeCacheFile(dir, containerID, netName, ifname, config string) {
 	}`, base64.StdEncoding.EncodeToString([]byte(config)), containerID, ifname, netName)
 
 	dirName := filepath.Join(dir, "results")
-	err := os.MkdirAll(dirName, 0700)
+	err := os.MkdirAll(dirName, 0o700)
 	Expect(err).NotTo(HaveOccurred())
 
 	filePath := filepath.Join(dirName, fmt.Sprintf("%s-%s-%s", netName, containerID, ifname))
-	err = os.WriteFile(filePath, []byte(cachedData), 0644)
+	err = os.WriteFile(filePath, []byte(cachedData), 0o644)
 	Expect(err).NotTo(HaveOccurred())
 }
 
@@ -79,12 +80,11 @@ type TestConf struct {
 	Type       string `json:"type,omitempty"`
 }
 
-func (f *fakeExec) addPlugin(expectedEnv []string, expectedConf string, result types.Result, err error) {
+func (f *fakeExec) addPlugin(expectedEnv []string, expectedConf string, result types.Result) {
 	f.plugins = append(f.plugins, &fakePlugin{
 		expectedEnv:  expectedEnv,
 		expectedConf: expectedConf,
 		result:       result,
-		err:          err,
 	})
 }
 
@@ -111,7 +111,7 @@ func getCNICommand(env []string) (string, error) {
 			return parts[1], nil
 		}
 	}
-	return "", fmt.Errorf("failed to find CNI_COMMAND")
+	return "", errors.New("failed to find CNI_COMMAND")
 }
 
 func (f *fakeExec) ExecPlugin(ctx context.Context, pluginPath string, stdinData []byte, environ []string) ([]byte, error) {
@@ -179,10 +179,10 @@ func (f *fakeExec) FindInPath(plugin string, paths []string) (string, error) {
 }
 
 func ensureCIDR(cidr string) *net.IPNet {
-	ip, net, err := net.ParseCIDR(cidr)
+	ip, network, err := net.ParseCIDR(cidr)
 	Expect(err).NotTo(HaveOccurred())
-	net.IP = ip
-	return net
+	network.IP = ip
+	return network
 }
 
 var _ = Describe("ocicni operations", func() {
@@ -229,7 +229,8 @@ var _ = Describe("ocicni operations", func() {
 		Expect(ocicni.Status()).NotTo(HaveOccurred())
 
 		// Ensure the default network is the one we expect
-		tmp := ocicni.(*cniNetworkPlugin)
+		tmp, ok := ocicni.(*cniNetworkPlugin)
+		Expect(ok).To(BeTrue())
 		net := tmp.getDefaultNetwork()
 		Expect(net.name).To(Equal("test"))
 		Expect(len(net.config.Plugins)).To(BeNumerically(">", 0))
@@ -251,7 +252,8 @@ var _ = Describe("ocicni operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(ocicni.Status, 5).Should(Succeed())
 
-		tmp := ocicni.(*cniNetworkPlugin)
+		tmp, ok := ocicni.(*cniNetworkPlugin)
+		Expect(ok).To(BeTrue())
 		net := tmp.getDefaultNetwork()
 		Expect(net.name).To(Equal("test"))
 		Expect(len(net.config.Plugins)).To(BeNumerically(">", 0))
@@ -271,23 +273,24 @@ var _ = Describe("ocicni operations", func() {
 
 		// Write a file in the bindir to trigger the fsnotify code to resync
 		fExec.failFind = false
-		err = os.WriteFile(filepath.Join(tmpBinDir, "myplugin"), []byte("adsfasdfsafd"), 0755)
+		err = os.WriteFile(filepath.Join(tmpBinDir, "myplugin"), []byte("adsfasdfsafd"), 0o755)
 		Expect(err).NotTo(HaveOccurred())
 
-		tmp := ocicni.(*cniNetworkPlugin)
+		tmp, ok := ocicni.(*cniNetworkPlugin)
+		Expect(ok).To(BeTrue())
 		Eventually(func() error {
 			net := tmp.getDefaultNetwork()
 			if net == nil {
-				return fmt.Errorf("no default net")
+				return errors.New("no default net")
 			}
 			if net.name != "test" {
-				return fmt.Errorf("name not test")
+				return errors.New("name not test")
 			}
 			if len(net.config.Plugins) == 0 {
-				return fmt.Errorf("no plugins")
+				return errors.New("no plugins")
 			}
 			if net.config.Plugins[0].Network.Type != "myplugin" {
-				return fmt.Errorf("wrong plugin type")
+				return errors.New("wrong plugin type")
 			}
 			return nil
 		}, 10).Should(Succeed())
@@ -295,6 +298,7 @@ var _ = Describe("ocicni operations", func() {
 		Expect(ocicni.Shutdown()).NotTo(HaveOccurred())
 	})
 
+	//nolint:dupl // no need to dedup for tests
 	It("should monitor the net conf dir for changes when default network is not specified", func() {
 		_, _, err := writeConfig(tmpDir, "5-notdefault.conf", "notdefault", "myplugin", "0.3.1")
 		Expect(err).NotTo(HaveOccurred())
@@ -306,7 +310,8 @@ var _ = Describe("ocicni operations", func() {
 		Expect(ocicni.Status()).NotTo(HaveOccurred())
 
 		// Ensure the default network is the one we expect
-		tmp := ocicni.(*cniNetworkPlugin)
+		tmp, ok := ocicni.(*cniNetworkPlugin)
+		Expect(ok).To(BeTrue())
 		net := tmp.getDefaultNetwork()
 		Expect(net.name).To(Equal("test"))
 		Expect(len(net.config.Plugins)).To(BeNumerically(">", 0))
@@ -326,6 +331,7 @@ var _ = Describe("ocicni operations", func() {
 		Expect(ocicni.Shutdown()).NotTo(HaveOccurred())
 	})
 
+	//nolint:dupl // no need to dedup for tests
 	It("should monitor the net conf dir for changes when default network is specified", func() {
 		_, _, err := writeConfig(tmpDir, "5-notdefault.conf", "notdefault", "myplugin", "0.3.1")
 		Expect(err).NotTo(HaveOccurred())
@@ -337,7 +343,8 @@ var _ = Describe("ocicni operations", func() {
 		Expect(ocicni.Status()).NotTo(HaveOccurred())
 
 		// Ensure the default network is the one we expect
-		tmp := ocicni.(*cniNetworkPlugin)
+		tmp, ok := ocicni.(*cniNetworkPlugin)
+		Expect(ok).To(BeTrue())
 		net := tmp.getDefaultNetwork()
 		Expect(net.name).To(Equal("test"))
 		Expect(len(net.config.Plugins)).To(BeNumerically(">", 0))
@@ -366,7 +373,8 @@ var _ = Describe("ocicni operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(ocicni.Status, 5).Should(Succeed())
 
-		tmp := ocicni.(*cniNetworkPlugin)
+		tmp, ok := ocicni.(*cniNetworkPlugin)
+		Expect(ok).To(BeTrue())
 		net := tmp.getDefaultNetwork()
 		Expect(net.name).To(Equal("test"))
 		Expect(len(net.config.Plugins)).To(BeNumerically(">", 0))
@@ -398,7 +406,8 @@ var _ = Describe("ocicni operations", func() {
 
 		Eventually(ocicni.Status, 5).Should(Succeed())
 
-		tmp := ocicni.(*cniNetworkPlugin)
+		tmp, ok := ocicni.(*cniNetworkPlugin)
+		Expect(ok).To(BeTrue())
 		net := tmp.getDefaultNetwork()
 		Expect(net.name).To(Equal("test"))
 		Expect(len(net.config.Plugins)).To(BeNumerically(">", 0))
@@ -431,7 +440,7 @@ var _ = Describe("ocicni operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		cniConfig := libcni.NewCNIConfig([]string{"/opt/cni/bin"}, &fakeExec{})
-		netMap, defname, err := loadNetworks(tmpDir, cniConfig)
+		netMap, defname, err := loadNetworks(context.TODO(), tmpDir, cniConfig)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(netMap)).To(Equal(4))
 		// filenames are sorted asciibetically
@@ -440,7 +449,7 @@ var _ = Describe("ocicni operations", func() {
 
 	It("returns no error from loadNetworks() when no config files exist", func() {
 		cniConfig := libcni.NewCNIConfig([]string{"/opt/cni/bin"}, &fakeExec{})
-		netMap, defname, err := loadNetworks(tmpDir, cniConfig)
+		netMap, defname, err := loadNetworks(context.TODO(), tmpDir, cniConfig)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(netMap)).To(Equal(0))
 		// filenames are sorted asciibetically
@@ -457,7 +466,7 @@ var _ = Describe("ocicni operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		cniConfig := libcni.NewCNIConfig([]string{"/opt/cni/bin"}, &fakeExec{})
-		netMap, _, err := loadNetworks(tmpDir, cniConfig)
+		netMap, _, err := loadNetworks(context.TODO(), tmpDir, cniConfig)
 		Expect(err).NotTo(HaveOccurred())
 
 		// We expect the type=myplugin2 network be ignored since it
@@ -473,7 +482,7 @@ var _ = Describe("ocicni operations", func() {
 		podNetwork := &PodNetwork{}
 
 		var (
-			runtimeConfig RuntimeConfig
+			runtimeConfig *RuntimeConfig
 			rt            *libcni.RuntimeConf
 			err           error
 		)
@@ -483,31 +492,31 @@ var _ = Describe("ocicni operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		// runtimeConfig with invalid IP
-		runtimeConfig = RuntimeConfig{IP: "172.16"}
+		runtimeConfig = &RuntimeConfig{IP: "172.16"}
 		_, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).To(HaveOccurred())
 
 		// runtimeConfig with valid IP
-		runtimeConfig = RuntimeConfig{IP: "172.16.0.1"}
+		runtimeConfig = &RuntimeConfig{IP: "172.16.0.1"}
 		rt, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(rt.Args)).To(Equal(6))
 		Expect(rt.Args[5][1]).To(Equal("172.16.0.1"))
 
 		// runtimeConfig with invalid MAC
-		runtimeConfig = RuntimeConfig{MAC: "f0:a6"}
+		runtimeConfig = &RuntimeConfig{MAC: "f0:a6"}
 		_, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).To(HaveOccurred())
 
 		// runtimeConfig with valid MAC
-		runtimeConfig = RuntimeConfig{MAC: "9e:0c:d9:b2:f0:a6"}
+		runtimeConfig = &RuntimeConfig{MAC: "9e:0c:d9:b2:f0:a6"}
 		rt, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(rt.Args)).To(Equal(6))
 		Expect(rt.Args[5][1]).To(Equal("9e:0c:d9:b2:f0:a6"))
 
 		// runtimeConfig with valid IP and valid MAC
-		runtimeConfig = RuntimeConfig{IP: "172.16.0.1", MAC: "9e:0c:d9:b2:f0:a6"}
+		runtimeConfig = &RuntimeConfig{IP: "172.16.0.1", MAC: "9e:0c:d9:b2:f0:a6"}
 		rt, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(len(rt.Args)).To(Equal(7))
@@ -515,12 +524,12 @@ var _ = Describe("ocicni operations", func() {
 		Expect(rt.Args[6][1]).To(Equal("9e:0c:d9:b2:f0:a6"))
 
 		// runtimeConfig with portMappings is nil
-		runtimeConfig = RuntimeConfig{PortMappings: nil}
+		runtimeConfig = &RuntimeConfig{PortMappings: nil}
 		_, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).NotTo(HaveOccurred())
 
 		// runtimeConfig with valid portMappings
-		runtimeConfig = RuntimeConfig{PortMappings: []PortMapping{{
+		runtimeConfig = &RuntimeConfig{PortMappings: []PortMapping{{
 			HostPort:      100,
 			ContainerPort: 50,
 			Protocol:      "tcp",
@@ -537,12 +546,12 @@ var _ = Describe("ocicni operations", func() {
 		Expect(pm[0].HostIP).To(Equal("192.168.0.1"))
 
 		// runtimeConfig with bandwidth is nil
-		runtimeConfig = RuntimeConfig{Bandwidth: nil}
+		runtimeConfig = &RuntimeConfig{Bandwidth: nil}
 		_, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).NotTo(HaveOccurred())
 
 		// runtimeConfig with valid bandwidth
-		runtimeConfig = RuntimeConfig{Bandwidth: &BandwidthConfig{
+		runtimeConfig = &RuntimeConfig{Bandwidth: &BandwidthConfig{
 			IngressRate:  1,
 			IngressBurst: 2,
 			EgressRate:   3,
@@ -558,12 +567,12 @@ var _ = Describe("ocicni operations", func() {
 		Expect(bw["egressBurst"]).To(Equal(uint64(4)))
 
 		// runtimeConfig with ipRanges is empty
-		runtimeConfig = RuntimeConfig{IpRanges: [][]IpRange{}}
+		runtimeConfig = &RuntimeConfig{IpRanges: [][]IpRange{}}
 		_, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).NotTo(HaveOccurred())
 
 		// runtimeConfig with valid ipRanges
-		runtimeConfig = RuntimeConfig{IpRanges: [][]IpRange{{IpRange{
+		runtimeConfig = &RuntimeConfig{IpRanges: [][]IpRange{{IpRange{
 			Subnet:     "192.168.0.0/24",
 			RangeStart: "192.168.0.100",
 			RangeEnd:   "192.168.0.200",
@@ -577,7 +586,7 @@ var _ = Describe("ocicni operations", func() {
 		Expect(len(ir[0])).To(Equal(1))
 		Expect(ir[0][0].Gateway).To(Equal("192.168.0.254"))
 
-		runtimeConfig = RuntimeConfig{CgroupPath: "/slice/pod/testing"}
+		runtimeConfig = &RuntimeConfig{CgroupPath: "/slice/pod/testing"}
 		rt, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).NotTo(HaveOccurred())
 		cg, ok := rt.CapabilityArgs["cgroupPath"].(string)
@@ -607,7 +616,7 @@ var _ = Describe("ocicni operations", func() {
 				},
 			},
 		}
-		fake.addPlugin(nil, conf, expectedResult, nil)
+		fake.addPlugin(nil, conf, expectedResult)
 
 		ocicni, err := initCNI(fake, cacheDir, "network2", tmpDir, true, "/opt/cni/bin")
 		Expect(err).NotTo(HaveOccurred())
@@ -623,7 +632,8 @@ var _ = Describe("ocicni operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(fake.addIndex).To(Equal(len(fake.plugins)))
 		Expect(len(results)).To(Equal(1))
-		r := results[0].Result.(*cniv04.Result)
+		r, ok := results[0].Result.(*cniv04.Result)
+		Expect(ok).To(BeTrue())
 		Expect(reflect.DeepEqual(r, expectedResult)).To(BeTrue())
 
 		// Make sure loopback device is up
@@ -670,7 +680,7 @@ var _ = Describe("ocicni operations", func() {
 				},
 			},
 		}
-		fake.addPlugin(nil, conf1, expectedResult1, nil)
+		fake.addPlugin(nil, conf1, expectedResult1)
 
 		expectedResult2 := &cniv04.Result{
 			CNIVersion: "0.3.1",
@@ -688,7 +698,7 @@ var _ = Describe("ocicni operations", func() {
 				},
 			},
 		}
-		fake.addPlugin(nil, conf2, expectedResult2, nil)
+		fake.addPlugin(nil, conf2, expectedResult2)
 
 		ocicni, err := initCNI(fake, cacheDir, "network2", tmpDir, true, "/opt/cni/bin")
 		Expect(err).NotTo(HaveOccurred())
@@ -708,9 +718,11 @@ var _ = Describe("ocicni operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(fake.addIndex).To(Equal(len(fake.plugins)))
 		Expect(len(results)).To(Equal(2))
-		r := results[0].Result.(*cniv04.Result)
+		r, ok := results[0].Result.(*cniv04.Result)
+		Expect(ok).To(BeTrue())
 		Expect(reflect.DeepEqual(r, expectedResult1)).To(BeTrue())
-		r = results[1].Result.(*cniv04.Result)
+		r, ok = results[1].Result.(*cniv04.Result)
+		Expect(ok).To(BeTrue())
 		Expect(reflect.DeepEqual(r, expectedResult2)).To(BeTrue())
 
 		err = ocicni.TearDownPod(podNet)
@@ -747,7 +759,7 @@ var _ = Describe("ocicni operations", func() {
 				},
 			},
 		}
-		fake.addPlugin(nil, conf1, expectedResult1, nil)
+		fake.addPlugin(nil, conf1, expectedResult1)
 
 		expectedResult2 := &cniv04.Result{
 			CNIVersion: "0.4.0",
@@ -766,7 +778,7 @@ var _ = Describe("ocicni operations", func() {
 				},
 			},
 		}
-		fake.addPlugin(nil, conf2, expectedResult2, nil)
+		fake.addPlugin(nil, conf2, expectedResult2)
 
 		ocicni, err := initCNI(fake, cacheDir, "network2", tmpDir, true, "/opt/cni/bin")
 		Expect(err).NotTo(HaveOccurred())
@@ -786,17 +798,21 @@ var _ = Describe("ocicni operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Expect(fake.addIndex).To(Equal(len(fake.plugins)))
 		Expect(len(results)).To(Equal(2))
-		r := results[0].Result.(*cniv04.Result)
+		r, ok := results[0].Result.(*cniv04.Result)
+		Expect(ok).To(BeTrue())
 		Expect(reflect.DeepEqual(r, expectedResult1)).To(BeTrue())
-		r = results[1].Result.(*cniv04.Result)
+		r, ok = results[1].Result.(*cniv04.Result)
+		Expect(ok).To(BeTrue())
 		Expect(reflect.DeepEqual(r, expectedResult2)).To(BeTrue())
 
 		resultsStatus, errStatus := ocicni.GetPodNetworkStatus(podNet)
 		Expect(errStatus).NotTo(HaveOccurred())
 		Expect(len(resultsStatus)).To(Equal(2))
-		r = resultsStatus[0].Result.(*cniv04.Result)
+		r, ok = resultsStatus[0].Result.(*cniv04.Result)
+		Expect(ok).To(BeTrue())
 		Expect(reflect.DeepEqual(r, expectedResult1)).To(BeTrue())
-		r = resultsStatus[1].Result.(*cniv04.Result)
+		r, ok = resultsStatus[1].Result.(*cniv04.Result)
+		Expect(ok).To(BeTrue())
 		Expect(reflect.DeepEqual(r, expectedResult2)).To(BeTrue())
 
 		err = ocicni.TearDownPod(podNet)
@@ -841,8 +857,8 @@ var _ = Describe("ocicni operations", func() {
 			writeCacheFile(cacheDir, containerID, netName2, ifname2, conf2)
 
 			fake = &fakeExec{}
-			fake.addPlugin([]string{fmt.Sprintf("CNI_IFNAME=%s", ifname1)}, conf1, nil, nil)
-			fake.addPlugin([]string{fmt.Sprintf("CNI_IFNAME=%s", ifname2)}, conf2, nil, nil)
+			fake.addPlugin([]string{"CNI_IFNAME=" + ifname1}, conf1, nil)
+			fake.addPlugin([]string{"CNI_IFNAME=" + ifname2}, conf2, nil)
 
 			ocicni, err = initCNI(fake, cacheDir, defaultNetName, tmpDir, true, "/opt/cni/bin")
 			Expect(err).NotTo(HaveOccurred())
@@ -879,15 +895,17 @@ var _ = Describe("ocicni operations", func() {
 		})
 		It("verifies that network operations can be locked for a pod using cached networks", func() {
 			podNet.Networks = []NetAttachment{}
-			tmp := ocicni.(*cniNetworkPlugin)
+			tmp, ok := ocicni.(*cniNetworkPlugin)
+			Expect(ok).To(BeTrue())
 			Expect(len(tmp.pods)).To(Equal(0))
-			tmp.podLock(podNet)
+			tmp.podLock(&podNet)
 			Expect(len(tmp.pods)).To(Equal(1))
 		})
 		It("verifies that network operations can be unlocked for a pod using cached networks", func() {
 			podNet.Networks = []NetAttachment{}
-			tmp := ocicni.(*cniNetworkPlugin)
-			tmp.podUnlock(podNet)
+			tmp, ok := ocicni.(*cniNetworkPlugin)
+			Expect(ok).To(BeTrue())
+			tmp.podUnlock(&podNet)
 			Expect(len(tmp.pods)).To(Equal(0))
 		})
 	})
@@ -907,8 +925,8 @@ var _ = Describe("ocicni operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 
 		fake := &fakeExec{}
-		fake.addPlugin(nil, conf1, nil, nil)
-		fake.addPlugin(nil, conf2, nil, nil)
+		fake.addPlugin(nil, conf1, nil)
+		fake.addPlugin(nil, conf2, nil)
 
 		ocicni, err := initCNI(fake, cacheDir, defaultNetName, tmpDir, true, "/opt/cni/bin")
 		Expect(err).NotTo(HaveOccurred())
