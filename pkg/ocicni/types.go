@@ -7,9 +7,9 @@ import (
 )
 
 const (
-	// DefaultInterfaceName is the string to be used for the interface name inside the net namespace
+	// DefaultInterfaceName is the string to be used for the interface name inside the net namespace.
 	DefaultInterfaceName = "eth0"
-	// CNIPluginName is the default name of the plugin
+	// CNIPluginName is the default name of the plugin.
 	CNIPluginName = "cni"
 )
 
@@ -106,7 +106,7 @@ type PodNetwork struct {
 	Aliases map[string][]string
 }
 
-// NetAttachment describes a container network attachment
+// NetAttachment describes a container network attachment.
 type NetAttachment struct {
 	// NetName contains the name of the CNI network to which the container
 	// should be or is attached
@@ -115,7 +115,7 @@ type NetAttachment struct {
 	Ifname string
 }
 
-// NetResult contains the result the network attachment operation
+// NetResult contains the result the network attachment operation.
 type NetResult struct {
 	// Result is the CNI Result
 	Result types.Result
@@ -124,7 +124,7 @@ type NetResult struct {
 	NetAttachment
 }
 
-// CNIPlugin is the interface that needs to be implemented by a plugin
+// CNIPlugin is the interface that needs to be implemented by a plugin.
 type CNIPlugin interface {
 	// Name returns the plugin's name. This will be used when searching
 	// for a plugin by name, e.g.

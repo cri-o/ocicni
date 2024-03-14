@@ -14,7 +14,7 @@ import (
 	"github.com/vishvananda/netlink"
 )
 
-var defaultNamespaceEnterCommandName = "nsenter"
+const defaultNamespaceEnterCommandName = "nsenter"
 
 type nsManager struct {
 	nsenterPath string

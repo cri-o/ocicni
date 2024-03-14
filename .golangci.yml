@@ -25,12 +25,16 @@ linters:
     - exportloopref
     - forbidigo
     - forcetypeassert
+    - gci
+    - ginkgolinter
     - gocheckcompilerdirectives
+    - gochecknoglobals
     - gochecknoinits
     - gochecksumtype
     - goconst
     - gocritic
     - gocyclo
+    - godot
     - godox
     - gofmt
     - gofumpt
@@ -54,6 +58,7 @@ linters:
     - misspell
     - musttag
     - nakedret
+    - nestif
     - nilerr
     - nilnil
     - noctx
@@ -66,6 +71,7 @@ linters:
     - promlinter
     - protogetter
     - reassign
+    - revive
     - rowserrcheck
     - sloglint
     - spancheck
@@ -90,26 +96,26 @@ linters:
     # - depguard
     # - exhaustruct
     # - funlen
-    # - gci
-    # - ginkgolinter
-    # - gochecknoglobals
     # - gocognit
-    # - godot
     # - goerr113
     # - gomnd
     # - gosec
     # - ireturn
     # - lll
-    # - nestif
     # - nlreturn
     # - nonamedreturns
-    # - revive
     # - tagliatelle
     # - testpackage
     # - varnamelen
     # - wrapcheck
     # - wsl
 linters-settings:
+  revive:
+    rules:
+      - name: dot-imports
+        disabled: true
+  nestif:
+    min-complexity: 10
   gocritic:
     enabled-checks:
       - appendAssign
