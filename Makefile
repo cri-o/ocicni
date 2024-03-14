@@ -1,5 +1,3 @@
-export GO111MODULE=off
-
 GO ?= go
 EPOCH_TEST_COMMIT ?= b0fc980
 PROJECT := github.com/cri-o/ocicni
@@ -15,6 +13,10 @@ ETCDIR ?= ${DESTDIR}/etc
 
 GIT_COMMIT := $(shell git rev-parse --short HEAD)
 BUILD_INFO := $(shell date +%s)
+
+BUILD_PATH := $(shell pwd)/build
+GOLANGCI_LINT := ${BUILD_PATH}/golangci-lint
+GOLANGCI_LINT_VERSION := v1.56.2
 
 # If GOPATH not specified, use one in the local directory
 ifeq ($(GOPATH),)
@@ -73,10 +75,20 @@ install.tools: .install.gitvalidation
 	fi
 
 vendor:
-	export GO111MODULE=on \
-		$(GO) mod tidy && \
-		$(GO) mod vendor && \
-		$(GO) mod verify
+	$(GO) mod tidy && \
+	$(GO) mod vendor && \
+	$(GO) mod verify
+
+$(GOLANGCI_LINT):
+	export VERSION=$(GOLANGCI_LINT_VERSION) \
+		URL=https://raw.githubusercontent.com/golangci/golangci-lint \
+		BINDIR=${BUILD_PATH} && \
+	curl -sSfL $$URL/$$VERSION/install.sh | sh -s $$VERSION
+
+lint:  ${GOLANGCI_LINT}
+	${GOLANGCI_LINT} version
+	${GOLANGCI_LINT} linters
+	GL_DEBUG=gocritic ${GOLANGCI_LINT} run
 
 .PHONY: \
 	binaries \
@@ -87,4 +99,5 @@ vendor:
 	check \
 	install.tools \
 	.gitvalidation \
-	vendor
+	vendor \
+	lint

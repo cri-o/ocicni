@@ -22,8 +22,8 @@ const (
 
 func printSandboxResults(results []ocicni.NetResult) {
 	for _, r := range results {
-		result, _ := cniv1.NewResultFromResult(r.Result)
-		if result != nil {
+		result, err := cniv1.NewResultFromResult(r.Result)
+		if err == nil {
 			for _, ip := range result.IPs {
 				intfDetails := ""
 				if ip.Interface != nil && *ip.Interface >= 0 && *ip.Interface < len(result.Interfaces) {
@@ -44,7 +44,7 @@ func main() {
 	flag.Parse()
 	networks := make([]string, 0)
 	for _, name := range strings.Split(*networksStr, ",") {
-		if len(name) > 0 {
+		if name != "" {
 			networks = append(networks, name)
 		}
 	}
