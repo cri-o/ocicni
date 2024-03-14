@@ -59,7 +59,7 @@ type cniNetwork struct {
 	config   *libcni.NetworkConfigList
 }
 
-var errMissingDefaultNetwork = "No CNI configuration file in %s. Has your network provider started?"
+const errMissingDefaultNetwork = "no CNI configuration file in %s. Has your network provider started?"
 
 type podLock struct {
 	// Count of in-flight operations for this pod; when this reaches zero
@@ -210,7 +210,7 @@ func InitCNINoInotify(defaultNetName, confDir, cacheDir string, binDirs ...strin
 	return initCNI(nil, cacheDir, defaultNetName, confDir, false, binDirs...)
 }
 
-// Internal function to allow faking out exec functions for testing
+// Internal function to allow faking out exec functions for testing.
 func initCNI(exec cniinvoke.Exec, cacheDir, defaultNetName, confDir string, useInotify bool, binDirs ...string) (CNIPlugin, error) {
 	if confDir == "" {
 		confDir = DefaultConfDir
