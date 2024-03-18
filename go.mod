@@ -7,7 +7,7 @@ require (
 	github.com/containernetworking/plugins v1.4.1
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/onsi/ginkgo/v2 v2.16.0
-	github.com/onsi/gomega v1.31.1
+	github.com/onsi/gomega v1.32.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/vishvananda/netlink v1.2.1-beta.2
 )
