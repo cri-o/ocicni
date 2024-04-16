@@ -803,6 +803,10 @@ func (network *cniNetwork) deleteFromNetwork(ctx context.Context, rt *libcni.Run
 	return cni.DelNetworkList(ctx, network.config, rt)
 }
 
+func (network *cniNetwork) getNetworkStatus(ctx context.Context, cni *libcni.CNIConfig) error {
+	return cni.GetStatusNetworkList(ctx, network.config)
+}
+
 func buildCNIRuntimeConf(podNetwork *PodNetwork, ifName string, runtimeConfig *RuntimeConfig) (*libcni.RuntimeConf, error) {
 	if runtimeConfig == nil {
 		runtimeConfig = &RuntimeConfig{}
@@ -887,9 +891,17 @@ func buildCNIRuntimeConf(podNetwork *PodNetwork, ifName string, runtimeConfig *R
 	return rt, nil
 }
 
+// Status returns error if the default network is not configured, or if
+// the default network reports a failing STATUS code.
 func (plugin *cniNetworkPlugin) Status() error {
-	if plugin.getDefaultNetwork() == nil {
+	return plugin.StatusWithContext(context.Background())
+}
+
+func (plugin *cniNetworkPlugin) StatusWithContext(ctx context.Context) error {
+	defaultNet := plugin.getDefaultNetwork()
+	if defaultNet == nil {
 		return fmt.Errorf(errMissingDefaultNetwork, plugin.confDir)
 	}
-	return nil
+
+	return defaultNet.getNetworkStatus(ctx, plugin.cniConfig)
 }

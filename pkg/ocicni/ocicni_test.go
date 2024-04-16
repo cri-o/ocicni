@@ -70,6 +70,8 @@ type fakeExec struct {
 	plugins  []*fakePlugin
 
 	failFind bool
+
+	failStatus bool
 }
 
 type TestConf struct {
@@ -132,6 +134,11 @@ func (f *fakeExec) ExecPlugin(ctx context.Context, pluginPath string, stdinData 
 	case "VERSION":
 		// Just return all supported versions
 		return json.Marshal(version.All)
+	case "STATUS":
+		if f.failStatus {
+			return nil, errors.New("status fails")
+		}
+		return nil, nil
 	default:
 		// Should never be reached
 		Expect(false).To(BeTrue())
@@ -363,8 +370,12 @@ var _ = Describe("ocicni operations", func() {
 	})
 
 	It("finds and refinds an asynchronously written default network configuration", func() {
-		ocicni, err := initCNI(&fakeExec{}, "", "test", tmpDir, true, "/opt/cni/bin")
+		f := &fakeExec{}
+		ocicni, err := initCNI(f, "", "test", tmpDir, true, "/opt/cni/bin")
 		Expect(err).NotTo(HaveOccurred())
+
+		err = ocicni.Status()
+		Expect(err).To(HaveOccurred())
 
 		// Write the default network config
 		_, confPath, err := writeConfig(tmpDir, "10-test.conf", "test", "myplugin", "0.3.1")
@@ -384,11 +395,19 @@ var _ = Describe("ocicni operations", func() {
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(ocicni.Status, 5).Should(HaveOccurred())
 
-		// Write the default network config again and wait for status
+		// Write the default network config again, this time with v1.1, and wait for status
 		// to be OK
-		_, _, err = writeConfig(tmpDir, "10-test.conf", "test", "myplugin", "0.3.1")
+		_, _, err = writeConfig(tmpDir, "10-test.conf", "test", "myplugin", "1.1.0")
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(ocicni.Status, 5).Should(Succeed())
+
+		f.failStatus = true
+		err = ocicni.Status()
+		Expect(err).To(HaveOccurred())
+
+		f.failStatus = false
+		err = ocicni.Status()
+		Expect(err).NotTo(HaveOccurred())
 
 		Expect(ocicni.Shutdown()).NotTo(HaveOccurred())
 	})
