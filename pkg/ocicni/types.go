@@ -125,6 +125,8 @@ type NetResult struct {
 }
 
 // CNIPlugin is the interface that needs to be implemented by a plugin.
+//
+//nolint:interfacebloat // existing API
 type CNIPlugin interface {
 	// Name returns the plugin's name. This will be used when searching
 	// for a plugin by name, e.g.
@@ -156,6 +158,8 @@ type CNIPlugin interface {
 
 	// NetworkStatus returns error if the network plugin is in error state
 	Status() error
+
+	StatusWithContext(ctx context.Context) error
 
 	// Shutdown terminates all driver operations
 	Shutdown() error
