@@ -67,6 +67,7 @@ type fakeExec struct {
 	addIndex int
 	delIndex int
 	chkIndex int
+	gcIndex  int
 	plugins  []*fakePlugin
 
 	failFind bool
@@ -78,6 +79,8 @@ type TestConf struct {
 	CNIVersion string `json:"cniVersion,omitempty"`
 	Name       string `json:"name,omitempty"`
 	Type       string `json:"type,omitempty"`
+
+	ValidAttachments []types.GCAttachment `json:"cni.dev/valid-attachments,omitempty"`
 }
 
 func (f *fakeExec) addPlugin(expectedEnv []string, expectedConf string, result types.Result) {
@@ -131,6 +134,10 @@ func (f *fakeExec) ExecPlugin(ctx context.Context, pluginPath string, stdinData 
 		Expect(len(f.plugins)).To(BeNumerically("==", f.addIndex))
 		index = f.chkIndex
 		f.chkIndex++
+	case "GC":
+		Expect(len(f.plugins)).To(BeNumerically(">", f.gcIndex))
+		index = f.gcIndex
+		f.gcIndex++
 	case "VERSION":
 		// Just return all supported versions
 		return json.Marshal(version.All)
@@ -205,6 +212,8 @@ var _ = Describe("ocicni operations", func() {
 		tmpBinDir, err = os.MkdirTemp("", "ocicni_tmp_bin")
 		Expect(err).NotTo(HaveOccurred())
 		cacheDir, err = os.MkdirTemp("", "ocicni_cache")
+		Expect(err).NotTo(HaveOccurred())
+		err = os.Mkdir(filepath.Join(cacheDir, "results"), 0o700)
 		Expect(err).NotTo(HaveOccurred())
 
 		networkNS, err = testutils.NewNS()
@@ -837,6 +846,73 @@ var _ = Describe("ocicni operations", func() {
 		Expect(fake.delIndex).To(Equal(len(fake.plugins)))
 
 		Expect(ocicni.Shutdown()).NotTo(HaveOccurred())
+	})
+
+	It("correctly issues a GC for the default network", func() {
+		_, _, err := writeConfig(tmpDir, "10-network2.conf", "network2", "myplugin", "1.1.0")
+		Expect(err).NotTo(HaveOccurred())
+
+		fake := &fakeExec{}
+
+		expectedConf := `
+{
+	"name": "network2",
+	"type": "myplugin",
+	"cniVersion": "1.1.0",
+	"cni.dev/valid-attachments": [ {"containerID": "1234567890", "ifname": "eth0" }]
+}
+		`
+
+		fake.addPlugin(nil, expectedConf, nil)
+
+		ocicni, err := initCNI(fake, cacheDir, "network2", tmpDir, true, "/opt/cni/bin")
+		Expect(err).NotTo(HaveOccurred())
+
+		podNet := PodNetwork{
+			Name:      "pod1",
+			Namespace: "namespace1",
+			ID:        "1234567890",
+			UID:       "9414bd03-b3d3-453e-9d9f-47dcee07958c",
+			NetNS:     networkNS.Path(),
+		}
+		err = ocicni.GC(context.Background(), []*PodNetwork{&podNet})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(fake.gcIndex).To(Equal(len(fake.plugins)))
+	})
+
+	It("correctly issues a GC for a speified network", func() {
+		_, _, err := writeConfig(tmpDir, "10-network2.conf", "network2", "myplugin", "1.1.0")
+		Expect(err).NotTo(HaveOccurred())
+
+		fake := &fakeExec{}
+
+		expectedConf := `
+{
+	"name": "network2",
+	"type": "myplugin",
+	"cniVersion": "1.1.0",
+	"cni.dev/valid-attachments": [ {"containerID": "1234567890", "ifname": "net1" }]
+}
+		`
+
+		fake.addPlugin(nil, expectedConf, nil)
+
+		ocicni, err := initCNI(fake, cacheDir, "network2", tmpDir, true, "/opt/cni/bin")
+		Expect(err).NotTo(HaveOccurred())
+
+		podNet := PodNetwork{
+			Name:      "pod1",
+			Namespace: "namespace1",
+			ID:        "1234567890",
+			UID:       "9414bd03-b3d3-453e-9d9f-47dcee07958c",
+			NetNS:     networkNS.Path(),
+			Networks: []NetAttachment{
+				{Name: "network2", Ifname: "net1"},
+			},
+		}
+		err = ocicni.GC(context.Background(), []*PodNetwork{&podNet})
+		Expect(err).NotTo(HaveOccurred())
+		Expect(fake.gcIndex).To(Equal(len(fake.plugins)))
 	})
 
 	Context("when tearing down a pod using cached info", func() {

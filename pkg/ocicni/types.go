@@ -156,6 +156,9 @@ type CNIPlugin interface {
 	// GetPodNetworkStatusWithContext is the same as GetPodNetworkStatus but takes a context
 	GetPodNetworkStatusWithContext(ctx context.Context, network PodNetwork) ([]NetResult, error)
 
+	// GC cleans up any resources concerned with stale pods
+	GC(ctx context.Context, validPods []*PodNetwork) error
+
 	// NetworkStatus returns error if the network plugin is in error state
 	Status() error
 
