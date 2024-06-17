@@ -3,7 +3,7 @@ module github.com/cri-o/ocicni
 go 1.20
 
 require (
-	github.com/containernetworking/cni v1.2.0
+	github.com/containernetworking/cni v1.2.1
 	github.com/containernetworking/plugins v1.5.0
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/onsi/ginkgo/v2 v2.19.0
