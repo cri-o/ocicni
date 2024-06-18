@@ -1,7 +1,7 @@
 github.com/Masterminds/semver/v3 v3.2.1 h1:RN9w6+7QoMeJVGyfmbcgs28Br8cvmnucEXnY0rYXWg0=
 github.com/Masterminds/semver/v3 v3.2.1/go.mod h1:qvl/7zhW3nngYb5+80sSMF+FG2BjYrf8m9wsX0PNOMQ=
-github.com/containernetworking/cni v1.2.0 h1:fEjhlfWwWAXEvlcMQu/i6z8DA0Kbu7EcmR5+zb6cm5I=
-github.com/containernetworking/cni v1.2.0/go.mod h1:/r+vA/7vrynNfbvSP9g8tIKEoy6win7sALJAw4ZiJks=
+github.com/containernetworking/cni v1.2.1 h1:PU9lIBbXNqdPIEuIxWGbtznlecv4Y+ZYqjX/j/2S7ug=
+github.com/containernetworking/cni v1.2.1/go.mod h1:m2nkpHY4lRZx89NUXHj4jahE5JCgaJuygB8cSwj0CTU=
 github.com/containernetworking/plugins v1.5.0 h1:P09DMlfvvsLSskDoftnuwXY7lwa7IAhTGznZxA5E8fk=
 github.com/containernetworking/plugins v1.5.0/go.mod h1:bcXMvG9gWGc6jVXeodmMzuXmXqpqMguZm6Zu/oIr7AA=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
