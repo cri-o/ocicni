@@ -485,7 +485,7 @@ func (plugin *cniNetworkPlugin) fillPodNetworks(podNetwork *PodNetwork) error {
 netLoop:
 	for i, network := range podNetwork.Networks {
 		if network.Ifname == "" {
-			for j := 0; j < 10000; j++ {
+			for j := range 10000 {
 				candidate := fmt.Sprintf("eth%d", j)
 				if !allIfNames[candidate] {
 					allIfNames[candidate] = true
