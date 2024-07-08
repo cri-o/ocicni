@@ -379,7 +379,9 @@ func (plugin *cniNetworkPlugin) syncNetworkConfig(ctx context.Context) error {
 	// Update defaultNetName if it is changeable
 	if plugin.defaultNetName.changeable {
 		plugin.defaultNetName.name = defaultNetName
-		logrus.Infof("Updated default CNI network name to %s", defaultNetName)
+		if defaultNetName != "" {
+			logrus.Infof("Updated default CNI network name to %s", defaultNetName)
+		}
 	} else {
 		logrus.Debugf("Default CNI network name %s is unchangeable", plugin.defaultNetName.name)
 	}
