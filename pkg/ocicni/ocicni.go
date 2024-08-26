@@ -584,7 +584,7 @@ func (plugin *cniNetworkPlugin) SetUpPodWithContext(ctx context.Context, podNetw
 
 	// Set up loopback interface
 	if err := bringUpLoopback(podNetwork.NetNS); err != nil {
-		logrus.Errorf(err.Error())
+		logrus.Error(err)
 		return nil, err
 	}
 
@@ -732,7 +732,7 @@ func (plugin *cniNetworkPlugin) GetPodNetworkStatusWithContext(ctx context.Conte
 	defer plugin.podUnlock(&podNetwork)
 
 	if err := checkLoopback(podNetwork.NetNS); err != nil {
-		logrus.Errorf(err.Error())
+		logrus.Error(err)
 		return nil, err
 	}
 
