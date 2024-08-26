@@ -4,7 +4,7 @@ name: test
 on: ["push", "pull_request"]
 
 env:
-  GO_VERSION: "1.22"
+  GO_VERSION: "1.23"
   LINUX_ARCHES: "amd64 386 arm arm64 s390x mips64le ppc64le"
 
 jobs:
@@ -12,11 +12,10 @@ jobs:
     name: Build all linux architectures
     runs-on: ubuntu-latest
     steps:
-      - name: setup go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-      - uses: actions/checkout@v4
 
       - name: Build on all supported architectures
         run: |
@@ -30,11 +29,10 @@ jobs:
     name: Run tests on Linux amd64
     runs-on: ubuntu-latest
     steps:
-      - name: setup go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-      - uses: actions/checkout@v4
 
       - name: Install test binaries
         run: |
@@ -58,4 +56,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
       - run: make lint
