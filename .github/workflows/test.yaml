@@ -5,32 +5,34 @@ on: ["push", "pull_request"]
 
 env:
   GO_VERSION: "1.23"
-  LINUX_ARCHES: "amd64 386 arm arm64 s390x mips64le ppc64le"
 
 jobs:
   build:
-    name: Build all linux architectures
+    name: Build / ${{ matrix.arch }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - amd64
+          - arm64
+          - s390x
+          - mips64le
+          - ppc64le
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      - uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
         with:
           go-version: ${{ env.GO_VERSION }}
-
-      - name: Build on all supported architectures
-        run: |
-          set -e
-          for arch in ${LINUX_ARCHES}; do
-            echo "Building for arch $arch"
-            GOARCH=$arch make
-          done
+      - name: Build on ${{ matrix.arch }}
+        run: make GOARCH=${{ matrix.arch }}
 
   test-linux:
     name: Run tests on Linux amd64
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      - uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
         with:
           go-version: ${{ env.GO_VERSION }}
 
@@ -54,8 +56,8 @@ jobs:
     name: Run golangci-lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@692973e3d937129bcbf40652eb9f2f61becf3332 # v4.1.7
+      - uses: actions/setup-go@0a12ed9d6a96ab950c8f026ed9f722fe0da7ef32 # v5.0.2
         with:
           go-version: ${{ env.GO_VERSION }}
       - run: make lint
