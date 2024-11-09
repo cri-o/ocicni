@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -155,10 +156,13 @@ func (plugin *cniNetworkPlugin) monitorConfDir(ctx context.Context, start *sync.
 	start.Done()
 	plugin.done.Add(1)
 	defer plugin.done.Done()
+	exts := []string{".conf", ".conflist", ".json"}
 	for {
 		select {
 		case event := <-plugin.watcher.Events:
-			logrus.Infof("CNI monitoring event %v", event)
+			if slices.Contains(exts, filepath.Ext(event.Name)) {
+				logrus.Infof("CNI monitoring event %v", event)
+			}
 
 			var defaultDeleted bool
 			createWriteRename := event.Op&fsnotify.Create == fsnotify.Create ||
