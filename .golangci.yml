@@ -23,6 +23,7 @@ linters:
     - errname
     - errorlint
     - exhaustive
+    - exptostd
     - fatcontext
     - forbidigo
     - forcetypeassert
@@ -48,6 +49,7 @@ linters:
     - gosmopolitan
     - govet
     - grouper
+    - iface
     - importas
     - inamedparam
     - ineffassign
@@ -62,7 +64,9 @@ linters:
     - nakedret
     - nestif
     - nilerr
+    - nilnesserr
     - nilnil
+    - nlreturn
     - noctx
     - nolintlint
     - nosprintfhostport
@@ -73,6 +77,7 @@ linters:
     - promlinter
     - protogetter
     - reassign
+    - recvcheck
     - revive
     - rowserrcheck
     - sloglint
@@ -91,8 +96,10 @@ linters:
     - unparam
     - unused
     - usestdlibvars
+    - usetesting
     - wastedassign
     - whitespace
+    - wsl
     - zerologlint
     # - cyclop
     # - depguard
@@ -104,13 +111,11 @@ linters:
     # - ireturn
     # - lll
     # - mnd
-    # - nlreturn
     # - nonamedreturns
     # - tagliatelle
     # - testpackage
     # - varnamelen
     # - wrapcheck
-    # - wsl
 linters-settings:
   revive:
     rules:
