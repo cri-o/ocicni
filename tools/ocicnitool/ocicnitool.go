@@ -26,6 +26,7 @@ func printSandboxResults(results []ocicni.NetResult) {
 		if err == nil {
 			for _, ip := range result.IPs {
 				intfDetails := ""
+
 				if ip.Interface != nil && *ip.Interface >= 0 && *ip.Interface < len(result.Interfaces) {
 					intf := result.Interfaces[*ip.Interface]
 					// Only print container sandbox interfaces (not host ones)
@@ -33,6 +34,7 @@ func printSandboxResults(results []ocicni.NetResult) {
 						intfDetails = fmt.Sprintf(" (%s %s)", intf.Name, intf.Mac)
 					}
 				}
+
 				fmt.Fprintf(os.Stdout, "IP: %s%s\n", ip.Address.String(), intfDetails)
 			}
 		}
@@ -42,7 +44,9 @@ func printSandboxResults(results []ocicni.NetResult) {
 func main() {
 	networksStr := flag.String("networks", "", "comma-separated list of CNI network names (optional)")
 	flag.Parse()
+
 	networks := make([]string, 0)
+
 	for _, name := range strings.Split(*networksStr, ",") {
 		if name != "" {
 			networks = append(networks, name)
@@ -60,6 +64,7 @@ func main() {
 
 	if len(flag.Args()) < 5 {
 		flag.Usage()
+
 		return
 	}
 
@@ -67,6 +72,7 @@ func main() {
 	if confdir == "" {
 		confdir = ocicni.DefaultConfDir
 	}
+
 	bindir := os.Getenv(EnvBinDir)
 	if bindir == "" {
 		bindir = ocicni.DefaultBinDir
@@ -96,12 +102,14 @@ func main() {
 		if err == nil {
 			printSandboxResults(results)
 		}
+
 		exit(err)
 	case CmdStatus:
 		results, err := plugin.GetPodNetworkStatus(podNetwork)
 		if err == nil {
 			printSandboxResults(results)
 		}
+
 		exit(err)
 	case CmdDel:
 		exit(plugin.TearDownPod(podNetwork))
@@ -113,5 +121,6 @@ func exit(err error) {
 		fmt.Fprintf(os.Stderr, "%s\n", err)
 		os.Exit(1)
 	}
+
 	os.Exit(0)
 }

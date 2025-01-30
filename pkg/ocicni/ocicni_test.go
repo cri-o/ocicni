@@ -30,6 +30,7 @@ func writeConfig(dir, fileName, netName, plugin, vers string) (conf, confPath st
 	"type": "%s",
 	"cniVersion": "%s"
 }`, netName, plugin, vers)
+
 	return conf, confPath, os.WriteFile(confPath, []byte(conf), 0o644)
 }
 
@@ -94,11 +95,14 @@ func (f *fakeExec) addPlugin(expectedEnv []string, expectedConf string, result t
 // Ensure everything in needles is also present in haystack.
 func matchArray(needles, haystack []string) {
 	Expect(len(needles)).To(BeNumerically("<=", len(haystack)))
+
 	for _, e1 := range needles {
 		found := ""
+
 		for _, e2 := range haystack {
 			if e1 == e2 {
 				found = e2
+
 				break
 			}
 		}
@@ -114,13 +118,16 @@ func getCNICommand(env []string) (string, error) {
 			return parts[1], nil
 		}
 	}
+
 	return "", errors.New("failed to find CNI_COMMAND")
 }
 
 func (f *fakeExec) ExecPlugin(ctx context.Context, pluginPath string, stdinData []byte, environ []string) ([]byte, error) {
 	cmd, err := getCNICommand(environ)
 	Expect(err).NotTo(HaveOccurred())
+
 	var index int
+
 	switch cmd {
 	case "ADD":
 		Expect(len(f.plugins)).To(BeNumerically(">", f.addIndex))
@@ -131,7 +138,7 @@ func (f *fakeExec) ExecPlugin(ctx context.Context, pluginPath string, stdinData 
 		index = f.delIndex
 		f.delIndex++
 	case "CHECK":
-		Expect(len(f.plugins)).To(BeNumerically("==", f.addIndex))
+		Expect(f.plugins).To(HaveLen(f.addIndex))
 		index = f.chkIndex
 		f.chkIndex++
 	case "GC":
@@ -145,11 +152,13 @@ func (f *fakeExec) ExecPlugin(ctx context.Context, pluginPath string, stdinData 
 		if f.failStatus {
 			return nil, errors.New("status fails")
 		}
+
 		return nil, nil
 	default:
 		// Should never be reached
 		Expect(false).To(BeTrue())
 	}
+
 	plugin := f.plugins[index]
 
 	GinkgoT().Logf("[%s %d] exec plugin %q found %+v", cmd, index, pluginPath, plugin)
@@ -161,6 +170,7 @@ func (f *fakeExec) ExecPlugin(ctx context.Context, pluginPath string, stdinData 
 
 	testData, err := json.Marshal(testConf)
 	Expect(err).NotTo(HaveOccurred())
+
 	if plugin.expectedConf != "" {
 		Expect(string(testData)).To(MatchJSON(plugin.expectedConf))
 	}
@@ -178,6 +188,7 @@ func (f *fakeExec) ExecPlugin(ctx context.Context, pluginPath string, stdinData 
 		resultJSON, err = json.Marshal(plugin.result)
 		Expect(err).NotTo(HaveOccurred())
 	}
+
 	return resultJSON, nil
 }
 
@@ -187,13 +198,16 @@ func (f *fakeExec) FindInPath(plugin string, paths []string) (string, error) {
 	if f.failFind {
 		return "", fmt.Errorf("failed to find plugin %q in path %s", plugin, paths)
 	}
+
 	return filepath.Join(paths[0], plugin), nil
 }
 
 func ensureCIDR(cidr string) *net.IPNet {
 	ip, network, err := net.ParseCIDR(cidr)
 	Expect(err).NotTo(HaveOccurred())
+
 	network.IP = ip
+
 	return network
 }
 
@@ -306,6 +320,7 @@ var _ = Describe("ocicni operations", func() {
 			if net.config.Plugins[0].Network.Type != "myplugin" {
 				return errors.New("wrong plugin type")
 			}
+
 			return nil
 		}, 10).Should(Succeed())
 
@@ -668,6 +683,7 @@ var _ = Describe("ocicni operations", func() {
 			link, err := netlink.LinkByName("lo")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(link.Attrs().Flags & net.FlagUp).To(Equal(net.FlagUp))
+
 			return nil
 		})
 		Expect(err).NotTo(HaveOccurred())
