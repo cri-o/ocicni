@@ -1,6 +1,7 @@
 module github.com/cri-o/ocicni
 
-go 1.23
+go 1.24
+
 require (
 	github.com/containernetworking/cni v1.2.3
 	github.com/containernetworking/plugins v1.6.2

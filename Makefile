@@ -16,7 +16,7 @@ BUILD_INFO := $(shell date +%s)
 
 BUILD_PATH := $(shell pwd)/build
 GOLANGCI_LINT := ${BUILD_PATH}/golangci-lint
-GOLANGCI_LINT_VERSION := v1.63.4
+GOLANGCI_LINT_VERSION := v1.64.8
 
 # If GOPATH not specified, use one in the local directory
 ifeq ($(GOPATH),)
