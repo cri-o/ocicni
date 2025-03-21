@@ -1,11 +1,6 @@
 ---
 name: test
-
 on: ["push", "pull_request"]
-
-env:
-  GO_VERSION: "1.23"
-
 jobs:
   build:
     name: Build / ${{ matrix.arch }}
@@ -23,7 +18,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
       - name: Build on ${{ matrix.arch }}
         run: make GOARCH=${{ matrix.arch }}
 
@@ -34,7 +29,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
 
       - name: Install test binaries
         run: |
@@ -59,5 +54,5 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: actions/setup-go@0aaccfd150d50ccaeb58ebd88d36e91967a5f35b # v5.4.0
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
       - run: make lint
