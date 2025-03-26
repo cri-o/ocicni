@@ -1,9 +1,8 @@
----
+version: "2"
 run:
   concurrency: 6
-  timeout: 10m
 linters:
-  disable-all: true
+  default: none
   enable:
     - asasalint
     - asciicheck
@@ -27,7 +26,6 @@ linters:
     - fatcontext
     - forbidigo
     - forcetypeassert
-    - gci
     - ginkgolinter
     - gocheckcompilerdirectives
     - gochecknoglobals
@@ -38,14 +36,10 @@ linters:
     - gocyclo
     - godot
     - godox
-    - gofmt
-    - gofumpt
     - goheader
-    - goimports
     - gomoddirectives
     - gomodguard
     - goprintffuncname
-    - gosimple
     - gosmopolitan
     - govet
     - grouper
@@ -84,13 +78,11 @@ linters:
     - spancheck
     - sqlclosecheck
     - staticcheck
-    - stylecheck
     - tagalign
     - testableexamples
     - testifylint
     - thelper
     - tparallel
-    - typecheck
     - unconvert
     - unparam
     - unused
@@ -115,12 +107,35 @@ linters:
     # - testpackage
     # - varnamelen
     # - wrapcheck
-linters-settings:
-  revive:
-    rules:
-      - name: dot-imports
-        disabled: true
-  nestif:
-    min-complexity: 10
-  gocritic:
-    enable-all: true
+  settings:
+    gocritic:
+      enable-all: true
+    nestif:
+      min-complexity: 10
+    revive:
+      rules:
+        - name: dot-imports
+          disabled: true
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
