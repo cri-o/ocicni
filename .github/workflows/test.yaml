@@ -1,6 +1,13 @@
 ---
 name: test
-on: ["push", "pull_request"]
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - v*
+    branches:
+      - main
+  pull_request:
 jobs:
   build:
     name: Build / ${{ matrix.arch }}
