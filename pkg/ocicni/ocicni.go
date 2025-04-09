@@ -782,7 +782,13 @@ func (plugin *cniNetworkPlugin) TearDownPodWithContext(ctx context.Context, podN
 
 	return plugin.forEachNetwork(ctx, &podNetwork, true, func(network *cniNetwork, podNetwork *PodNetwork, rt *libcni.RuntimeConf) error {
 		fullPodName := buildFullPodName(podNetwork)
-		logrus.Infof("Deleting pod %s from CNI network %q (type=%v)", fullPodName, network.name, network.config.Plugins[0].Network.Type)
+
+		networkType := "unknown"
+		if network.config != nil && len(network.config.Plugins) > 0 && network.config.Plugins[0].Network != nil {
+			networkType = network.config.Plugins[0].Network.Type
+		}
+
+		logrus.Infof("Deleting pod %s from CNI network %q (type=%v)", fullPodName, network.name, networkType)
 
 		if err := network.deleteFromNetwork(ctx, rt, plugin.cniConfig); err != nil {
 			return fmt.Errorf("error removing pod %s from CNI network %q: %w", fullPodName, network.name, err)
