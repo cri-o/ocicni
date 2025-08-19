@@ -336,7 +336,14 @@ func loadNetworks(ctx context.Context, confDir string, cni *libcni.CNIConfig) (n
 				continue
 			}
 		} else {
-			conf, err := libcni.ConfFromFile(confFile)
+			bytes, err := os.ReadFile(confFile)
+			if err != nil {
+				logrus.Errorf("Error loading CNI config file %s: %v", confFile, err)
+
+				continue
+			}
+
+			conf, err := libcni.NetworkPluginConfFromBytes(bytes)
 			if err != nil {
 				// do not log ENOENT errors
 				if !os.IsNotExist(err) {
@@ -346,12 +353,7 @@ func loadNetworks(ctx context.Context, confDir string, cni *libcni.CNIConfig) (n
 				continue
 			}
 
-			if conf.Network.Type == "" {
-				logrus.Warningf("Error loading CNI config file %s: no 'type'; perhaps this is a .conflist?", confFile)
-
-				continue
-			}
-
+			//nolint:staticcheck // we still require this function
 			confList, err = libcni.ConfListFromConf(conf)
 			if err != nil {
 				logrus.Errorf("Error converting CNI config file %s to list: %v", confFile, err)
@@ -487,18 +489,19 @@ func (plugin *cniNetworkPlugin) loadNetworkFromCache(name string, rt *libcni.Run
 		return nil, nil, fmt.Errorf("network %q not found in CNI cache", name)
 	}
 
-	cniNet.config, err = libcni.ConfListFromBytes(confBytes)
+	cniNet.config, err = libcni.NetworkConfFromBytes(confBytes)
 	if err != nil {
+		return nil, nil, err
+	}
+
+	if len(cniNet.config.Plugins) == 0 {
 		// Might be a plain NetworkConfig
-		netConf, err := libcni.ConfFromBytes(confBytes)
+		netConf, err := libcni.NetworkPluginConfFromBytes(confBytes)
 		if err != nil {
 			return nil, nil, err
 		}
-		// Up-convert to a NetworkConfigList
-		cniNet.config, err = libcni.ConfListFromConf(netConf)
-		if err != nil {
-			return nil, nil, err
-		}
+
+		cniNet.config.Plugins = []*libcni.PluginConfig{netConf}
 	}
 
 	return cniNet, rt, nil
