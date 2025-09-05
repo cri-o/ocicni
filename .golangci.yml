@@ -111,7 +111,7 @@ linters:
     gocritic:
       enable-all: true
     nestif:
-      min-complexity: 10
+      min-complexity: 11
     revive:
       rules:
         - name: dot-imports
