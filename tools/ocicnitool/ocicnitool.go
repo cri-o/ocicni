@@ -47,7 +47,7 @@ func main() {
 
 	networks := make([]string, 0)
 
-	for _, name := range strings.Split(*networksStr, ",") {
+	for name := range strings.SplitSeq(*networksStr, ",") {
 		if name != "" {
 			networks = append(networks, name)
 		}
