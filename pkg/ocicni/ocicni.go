@@ -1005,11 +1005,11 @@ func buildCNIRuntimeConf(podNetwork *PodNetwork, ifName string, runtimeConfig *R
 			{"K8S_POD_INFRA_CONTAINER_ID", podNetwork.ID},
 			{"K8S_POD_UID", podNetwork.UID},
 		},
-		CapabilityArgs: map[string]interface{}{},
+		CapabilityArgs: map[string]any{},
 	}
 
 	// Propagate existing CNI_ARGS to non-k8s consumers
-	for _, kvpairs := range strings.Split(os.Getenv("CNI_ARGS"), ";") {
+	for kvpairs := range strings.SplitSeq(os.Getenv("CNI_ARGS"), ";") {
 		if keyval := strings.SplitN(kvpairs, "=", 2); len(keyval) == 2 {
 			rt.Args = append(rt.Args, [2]string{keyval[0], keyval[1]})
 		}
