@@ -81,7 +81,7 @@ type TestConf struct {
 	Name       string `json:"name,omitempty"`
 	Type       string `json:"type,omitempty"`
 
-	ValidAttachments []types.GCAttachment `json:"cni.dev/valid-attachments,omitempty"`
+	ValidAttachments []types.GCAttachment `json:"cni.dev/valid-attachments,omitempty"` //nolint:tagliatelle // CNI spec format
 }
 
 func (f *fakeExec) addPlugin(expectedEnv []string, expectedConf string, result types.Result) {
@@ -221,6 +221,7 @@ var _ = Describe("ocicni operations", func() {
 
 	BeforeEach(func() {
 		var err error
+
 		tmpDir, err = os.MkdirTemp("", "ocicni_tmp")
 		Expect(err).NotTo(HaveOccurred())
 		tmpBinDir, err = os.MkdirTemp("", "ocicni_tmp_bin")
@@ -259,6 +260,7 @@ var _ = Describe("ocicni operations", func() {
 		// Ensure the default network is the one we expect
 		tmp, ok := ocicni.(*cniNetworkPlugin)
 		Expect(ok).To(BeTrue())
+
 		net := tmp.getDefaultNetwork()
 		Expect(net.name).To(Equal("test"))
 		Expect(net.config.Plugins).ToNot(BeEmpty())
@@ -282,6 +284,7 @@ var _ = Describe("ocicni operations", func() {
 
 		tmp, ok := ocicni.(*cniNetworkPlugin)
 		Expect(ok).To(BeTrue())
+
 		net := tmp.getDefaultNetwork()
 		Expect(net.name).To(Equal("test"))
 		Expect(net.config.Plugins).ToNot(BeEmpty())
@@ -311,12 +314,15 @@ var _ = Describe("ocicni operations", func() {
 			if net == nil {
 				return errors.New("no default net")
 			}
+
 			if net.name != "test" {
 				return errors.New("name not test")
 			}
+
 			if len(net.config.Plugins) == 0 {
 				return errors.New("no plugins")
 			}
+
 			if net.config.Plugins[0].Network.Type != "myplugin" {
 				return errors.New("wrong plugin type")
 			}
@@ -341,6 +347,7 @@ var _ = Describe("ocicni operations", func() {
 		// Ensure the default network is the one we expect
 		tmp, ok := ocicni.(*cniNetworkPlugin)
 		Expect(ok).To(BeTrue())
+
 		net := tmp.getDefaultNetwork()
 		Expect(net.name).To(Equal("test"))
 		Expect(net.config.Plugins).ToNot(BeEmpty())
@@ -374,6 +381,7 @@ var _ = Describe("ocicni operations", func() {
 		// Ensure the default network is the one we expect
 		tmp, ok := ocicni.(*cniNetworkPlugin)
 		Expect(ok).To(BeTrue())
+
 		net := tmp.getDefaultNetwork()
 		Expect(net.name).To(Equal("test"))
 		Expect(net.config.Plugins).ToNot(BeEmpty())
@@ -408,6 +416,7 @@ var _ = Describe("ocicni operations", func() {
 
 		tmp, ok := ocicni.(*cniNetworkPlugin)
 		Expect(ok).To(BeTrue())
+
 		net := tmp.getDefaultNetwork()
 		Expect(net.name).To(Equal("test"))
 		Expect(net.config.Plugins).ToNot(BeEmpty())
@@ -449,6 +458,7 @@ var _ = Describe("ocicni operations", func() {
 
 		tmp, ok := ocicni.(*cniNetworkPlugin)
 		Expect(ok).To(BeTrue())
+
 		net := tmp.getDefaultNetwork()
 		Expect(net.name).To(Equal("test"))
 		Expect(net.config.Plugins).ToNot(BeEmpty())
@@ -578,6 +588,7 @@ var _ = Describe("ocicni operations", func() {
 		}}}
 		rt, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).NotTo(HaveOccurred())
+
 		pm, ok := rt.CapabilityArgs["portMappings"].([]PortMapping)
 		Expect(ok).To(BeTrue())
 		Expect(pm).To(HaveLen(1))
@@ -600,6 +611,7 @@ var _ = Describe("ocicni operations", func() {
 		}}
 		rt, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).NotTo(HaveOccurred())
+
 		bw, ok := rt.CapabilityArgs["bandwidth"].(map[string]uint64)
 		Expect(ok).To(BeTrue())
 		Expect(bw["ingressRate"]).To(Equal(uint64(1)))
@@ -621,6 +633,7 @@ var _ = Describe("ocicni operations", func() {
 		}}}}
 		rt, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).NotTo(HaveOccurred())
+
 		ir, ok := rt.CapabilityArgs["ipRanges"].([][]IpRange)
 		Expect(ok).To(BeTrue())
 		Expect(ir).To(HaveLen(1))
@@ -630,6 +643,7 @@ var _ = Describe("ocicni operations", func() {
 		runtimeConfig = &RuntimeConfig{CgroupPath: "/slice/pod/testing"}
 		rt, err = buildCNIRuntimeConf(podNetwork, ifName, runtimeConfig)
 		Expect(err).NotTo(HaveOccurred())
+
 		cg, ok := rt.CapabilityArgs["cgroupPath"].(string)
 		Expect(ok).To(BeTrue())
 		Expect(cg).To(Equal("/slice/pod/testing"))
@@ -680,6 +694,7 @@ var _ = Describe("ocicni operations", func() {
 		// Make sure loopback device is up
 		err = networkNS.Do(func(_ ns.NetNS) error {
 			defer GinkgoRecover()
+
 			link, err := netlink.LinkByName("lo")
 			Expect(err).NotTo(HaveOccurred())
 			Expect(link.Attrs().Flags & net.FlagUp).To(Equal(net.FlagUp))
@@ -940,6 +955,7 @@ var _ = Describe("ocicni operations", func() {
 			ifname2        string = "eth1"
 			defaultNetName string = "test"
 		)
+
 		var (
 			fake   *fakeExec
 			ocicni CNIPlugin
@@ -1039,6 +1055,7 @@ var _ = Describe("ocicni operations", func() {
 
 		ocicni, err := initCNI(fake, cacheDir, defaultNetName, tmpDir, true, "/opt/cni/bin")
 		Expect(err).NotTo(HaveOccurred())
+
 		defer Expect(ocicni.Shutdown()).NotTo(HaveOccurred())
 
 		podNet := PodNetwork{
