@@ -18,6 +18,11 @@ const (
 	CmdAdd    = "add"
 	CmdStatus = "status"
 	CmdDel    = "del"
+
+	// 1 command + 4 positional fields (pod_namespace, pod_name, pod_id, netns).
+	minRequiredArgs = 5
+
+	exitCodeUsage = 2
 )
 
 func printSandboxResults(results []ocicni.NetResult) {
@@ -43,6 +48,7 @@ func printSandboxResults(results []ocicni.NetResult) {
 
 func main() {
 	networksStr := flag.String("networks", "", "comma-separated list of CNI network names (optional)")
+
 	flag.Parse()
 
 	networks := make([]string, 0)
@@ -62,10 +68,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  %s [-networks name[,name...]] %s   <pod_namespace> <pod_name> <pod_id> <netns>\n", exe, CmdDel)
 	}
 
-	if len(flag.Args()) < 5 {
+	if len(flag.Args()) < minRequiredArgs {
 		flag.Usage()
-
-		return
+		os.Exit(exitCodeUsage)
 	}
 
 	confdir := os.Getenv(EnvConfDir)
@@ -113,6 +118,9 @@ func main() {
 		exit(err)
 	case CmdDel:
 		exit(plugin.TearDownPod(podNetwork))
+	default:
+		flag.Usage()
+		os.Exit(exitCodeUsage)
 	}
 }
 
