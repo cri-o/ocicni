@@ -19,7 +19,7 @@ github.com/containernetworking/cni/pkg/version
 ## explicit; go 1.24.2
 github.com/containernetworking/plugins/pkg/ns
 github.com/containernetworking/plugins/pkg/testutils
-# github.com/fsnotify/fsnotify v1.10.0
+# github.com/fsnotify/fsnotify v1.10.1
 ## explicit; go 1.23
 github.com/fsnotify/fsnotify
 github.com/fsnotify/fsnotify/internal
