@@ -4,6 +4,7 @@ run:
 linters:
   default: none
   enable:
+    - arangolint
     - asasalint
     - asciicheck
     - bidichk
@@ -12,11 +13,13 @@ linters:
     - containedctx
     - contextcheck
     - copyloopvar
+    - cyclop
     - decorder
     - dogsled
     - dupl
     - dupword
     - durationcheck
+    - embeddedstructfieldcheck
     - errcheck
     - errchkjson
     - errname
@@ -26,14 +29,18 @@ linters:
     - fatcontext
     - forbidigo
     - forcetypeassert
+    - funcorder
+    - funlen
     - ginkgolinter
     - gocheckcompilerdirectives
     - gochecknoglobals
     - gochecknoinits
     - gochecksumtype
+    - gocognit
     - goconst
     - gocritic
     - gocyclo
+    - godoclint
     - godot
     - godox
     - goheader
@@ -46,14 +53,18 @@ linters:
     - iface
     - importas
     - inamedparam
+    - ireturn
     - ineffassign
     - interfacebloat
     - intrange
+    - iotamixing
     - loggercheck
     - maintidx
     - makezero
     - mirror
     - misspell
+    - mnd
+    - modernize
     - musttag
     - nakedret
     - nestif
@@ -79,37 +90,54 @@ linters:
     - sqlclosecheck
     - staticcheck
     - tagalign
+    - tagliatelle
     - testableexamples
     - testifylint
     - thelper
     - tparallel
     - unconvert
     - unparam
+    - unqueryvet
     - unused
     - usestdlibvars
     - usetesting
     - wastedassign
     - whitespace
-    - wsl
+    - wsl_v5
     - zerologlint
-    # - cyclop
     # - depguard
     # - err113
     # - exhaustruct
-    # - funlen
-    # - gocognit
     # - gosec
-    # - ireturn
     # - lll
-    # - mnd
+    # - noinlineerr
     # - nonamedreturns
-    # - tagliatelle
     # - testpackage
     # - varnamelen
     # - wrapcheck
   settings:
+    cyclop:
+      max-complexity: 15
+    funcorder:
+      struct-method: false
+    funlen:
+      lines: 85
+      statements: 50
+    gocognit:
+      min-complexity: 35
     gocritic:
       enable-all: true
+    ireturn:
+      allow:
+        - error
+        - stdlib
+        - github.com/cri-o/ocicni/pkg/ocicni.CNIPlugin
+        - github.com/containernetworking/cni/pkg/types.Result
+    mnd:
+      ignored-numbers:
+        - "0o755"
+      ignored-functions:
+        - "strings.SplitN"
     nestif:
       min-complexity: 11
     revive:
