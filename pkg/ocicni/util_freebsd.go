@@ -4,6 +4,7 @@
 package ocicni
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os/exec"
@@ -16,14 +17,14 @@ func (nsm *nsManager) init() error {
 	return nil
 }
 
-func getContainerDetails(nsm *nsManager, netnsJailName, interfaceName, addrType string) (*net.IPNet, *net.HardwareAddr, error) {
+func getContainerDetails(ctx context.Context, nsm *nsManager, netnsJailName, interfaceName, addrType string) (*net.IPNet, *net.HardwareAddr, error) {
 	// Try to retrieve ip inside container network namespace
 	if addrType == "-4" {
 		addrType = "inet"
 	} else {
 		addrType = "inet6"
 	}
-	output, err := exec.Command(
+	output, err := exec.CommandContext(ctx,
 		"ifconfig", "-j", netnsJailName,
 		"-f", "inet:cidr,inet6:cidr",
 		interfaceName,
@@ -51,7 +52,7 @@ func getContainerDetails(nsm *nsManager, netnsJailName, interfaceName, addrType 
 	}
 
 	// Try to retrieve MAC inside container network namespace
-	output, err = exec.Command(
+	output, err = exec.CommandContext(ctx,
 		"ifconfig", "-j", netnsJailName, "-f", "inet:cidr,inet6:cidr",
 		interfaceName,
 		"ether").CombinedOutput()
