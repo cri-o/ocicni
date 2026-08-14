@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/containernetworking/cni/libcni"
 	"github.com/containernetworking/cni/pkg/types"
@@ -65,6 +67,7 @@ type fakePlugin struct {
 type fakeExec struct {
 	version.PluginDecoder
 
+	mu       sync.Mutex
 	addIndex int
 	delIndex int
 	chkIndex int
@@ -122,9 +125,9 @@ func getCNICommand(env []string) (string, error) {
 	return "", errors.New("failed to find CNI_COMMAND")
 }
 
-func (f *fakeExec) ExecPlugin(ctx context.Context, pluginPath string, stdinData []byte, environ []string) ([]byte, error) {
-	cmd, err := getCNICommand(environ)
-	Expect(err).NotTo(HaveOccurred())
+func (f *fakeExec) nextPlugin(cmd string) *fakePlugin {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 
 	var index int
 
@@ -145,8 +148,19 @@ func (f *fakeExec) ExecPlugin(ctx context.Context, pluginPath string, stdinData 
 		Expect(len(f.plugins)).To(BeNumerically(">", f.gcIndex))
 		index = f.gcIndex
 		f.gcIndex++
+	default:
+		Expect(false).To(BeTrue())
+	}
+
+	return f.plugins[index]
+}
+
+func (f *fakeExec) ExecPlugin(ctx context.Context, pluginPath string, stdinData []byte, environ []string) ([]byte, error) {
+	cmd, err := getCNICommand(environ)
+	Expect(err).NotTo(HaveOccurred())
+
+	switch cmd {
 	case "VERSION":
-		// Just return all supported versions
 		return json.Marshal(version.All)
 	case "STATUS":
 		if f.failStatus {
@@ -154,14 +168,11 @@ func (f *fakeExec) ExecPlugin(ctx context.Context, pluginPath string, stdinData 
 		}
 
 		return nil, nil
-	default:
-		// Should never be reached
-		Expect(false).To(BeTrue())
 	}
 
-	plugin := f.plugins[index]
+	plugin := f.nextPlugin(cmd)
 
-	GinkgoT().Logf("[%s %d] exec plugin %q found %+v", cmd, index, pluginPath, plugin)
+	GinkgoT().Logf("[%s] exec plugin %q found %+v", cmd, pluginPath, plugin)
 
 	// SetUpPod We only care about a few fields
 	testConf := &TestConf{}
@@ -708,6 +719,135 @@ var _ = Describe("ocicni operations", func() {
 		Expect(fake.delIndex).To(Equal(len(fake.plugins)))
 
 		Expect(ocicni.Shutdown()).NotTo(HaveOccurred())
+	})
+
+	It("sets up and tears down pod with context using default network", func() {
+		conf, _, err := writeConfig(tmpDir, "10-network2.conf", "network2", "myplugin", "0.4.0")
+		Expect(err).NotTo(HaveOccurred())
+
+		fake := &fakeExec{}
+		expectedResult := &cniv04.Result{
+			CNIVersion: "0.4.0",
+			Interfaces: []*cniv04.Interface{
+				{
+					Name:    "eth0",
+					Mac:     "01:23:45:67:89:01",
+					Sandbox: networkNS.Path(),
+				},
+			},
+			IPs: []*cniv04.IPConfig{
+				{
+					Interface: cniv04.Int(0),
+					Version:   "4",
+					Address:   *ensureCIDR("1.1.1.2/24"),
+				},
+			},
+		}
+		fake.addPlugin(nil, conf, expectedResult)
+
+		ocicni, err := initCNI(fake, cacheDir, "network2", tmpDir, true, "/opt/cni/bin")
+		Expect(err).NotTo(HaveOccurred())
+
+		podNet := PodNetwork{
+			Name:      "pod1",
+			Namespace: "namespace1",
+			ID:        "1234567890",
+			UID:       "9414bd03-b3d3-453e-9d9f-47dcee07958c",
+			NetNS:     networkNS.Path(),
+		}
+
+		ctx := context.Background()
+		results, err := ocicni.SetUpPodWithContext(ctx, podNet)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(results).To(HaveLen(1))
+		r, ok := results[0].Result.(*cniv04.Result)
+		Expect(ok).To(BeTrue())
+		Expect(reflect.DeepEqual(r, expectedResult)).To(BeTrue())
+
+		err = ocicni.TearDownPodWithContext(ctx, podNet)
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(ocicni.Shutdown()).NotTo(HaveOccurred())
+	})
+
+	It("handles concurrent pod operations safely", func() {
+		conf, _, err := writeConfig(tmpDir, "10-network2.conf", "network2", "myplugin", "0.4.0")
+		Expect(err).NotTo(HaveOccurred())
+
+		const goroutines = 10
+
+		fake := &fakeExec{}
+
+		addResult := &cniv04.Result{
+			CNIVersion: "0.4.0",
+			Interfaces: []*cniv04.Interface{
+				{
+					Name:    "eth0",
+					Mac:     "01:23:45:67:89:01",
+					Sandbox: networkNS.Path(),
+				},
+			},
+			IPs: []*cniv04.IPConfig{
+				{
+					Interface: cniv04.Int(0),
+					Version:   "4",
+					Address:   *ensureCIDR("1.1.1.2/24"),
+				},
+			},
+		}
+
+		for range goroutines {
+			fake.addPlugin(nil, conf, addResult)
+		}
+
+		ocicni, err := initCNI(fake, cacheDir, "network2", tmpDir, true, "/opt/cni/bin")
+		Expect(err).NotTo(HaveOccurred())
+
+		defer func() {
+			Expect(ocicni.Shutdown()).NotTo(HaveOccurred())
+		}()
+
+		Eventually(func() bool {
+			return ocicni.Status() == nil
+		}, 5*time.Second, 100*time.Millisecond).Should(BeTrue())
+
+		var wg sync.WaitGroup
+
+		wg.Add(goroutines)
+
+		errCh := make(chan error, goroutines*2)
+
+		for i := range goroutines {
+			go func() {
+				defer wg.Done()
+
+				podNet := PodNetwork{
+					Name:      fmt.Sprintf("pod%d", i),
+					Namespace: "namespace1",
+					ID:        fmt.Sprintf("pod-id-%d", i),
+					NetNS:     networkNS.Path(),
+				}
+
+				_, setupErr := ocicni.SetUpPod(podNet)
+				if setupErr != nil {
+					errCh <- setupErr
+
+					return
+				}
+
+				teardownErr := ocicni.TearDownPod(podNet)
+				if teardownErr != nil {
+					errCh <- teardownErr
+				}
+			}()
+		}
+
+		wg.Wait()
+		close(errCh)
+
+		for err := range errCh {
+			Expect(err).NotTo(HaveOccurred())
+		}
 	})
 
 	It("sets up and tears down a pod using specified networks", func() {

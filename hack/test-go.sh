@@ -13,11 +13,11 @@ if [ ! -z "${COVERALLS:-""}" ]; then
     echo "with coverage profile generation..."
     i=0
     for t in ${PKGS}; do
-        testrun "-covermode set -coverprofile ${i}.coverprofile ${t}"
+        testrun "-race -covermode atomic -coverprofile ${i}.coverprofile ${t}"
         i=$((i+1))
     done
 else
     echo "without coverage profile generation..."
-    testrun "./..."
+    testrun "-race ./..."
 fi
 
