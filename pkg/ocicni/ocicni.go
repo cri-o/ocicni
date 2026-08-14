@@ -142,7 +142,7 @@ func newWatcher(dirs []string) (*fsnotify.Watcher, error) {
 
 	watcher, err := fsnotify.NewWatcher()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create new watcher %w", err)
+		return nil, fmt.Errorf("failed to create new watcher: %w", err)
 	}
 
 	defer func() {
