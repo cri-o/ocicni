@@ -161,58 +161,71 @@ func newWatcher(dirs []string) (*fsnotify.Watcher, error) {
 	return watcher, nil
 }
 
-func (plugin *cniNetworkPlugin) monitorConfDir(ctx context.Context, start *sync.WaitGroup) {
-	start.Done()
-	plugin.done.Add(1)
-
+func (plugin *cniNetworkPlugin) monitorConfDir(ctx context.Context) {
 	defer plugin.done.Done()
-
-	exts := []string{".conf", ".conflist", ".json"}
 
 	for {
 		select {
-		case event := <-plugin.watcher.Events:
-			if slices.Contains(exts, filepath.Ext(event.Name)) {
-				logrus.Infof("CNI monitoring event %v", event)
+		case event, ok := <-plugin.watcher.Events:
+			if !ok {
+				logrus.Errorf("CNI monitoring events channel closed, stopping monitoring")
+
+				return
 			}
 
-			var defaultDeleted bool
+			plugin.handleWatcherEvent(ctx, event)
 
-			createWriteRename := event.Op&fsnotify.Create == fsnotify.Create ||
-				event.Op&fsnotify.Write == fsnotify.Write ||
-				event.Op&fsnotify.Rename == fsnotify.Rename
+		case err, ok := <-plugin.watcher.Errors:
+			if !ok {
+				logrus.Errorf("CNI monitoring errors channel closed, stopping monitoring")
 
-			if event.Op&fsnotify.Remove == fsnotify.Remove {
-				// Care about the event if the default network
-				// was just deleted
-				defNet := plugin.getDefaultNetwork()
-				if defNet != nil && event.Name == defNet.filePath {
-					defaultDeleted = true
-				}
+				return
 			}
 
-			if !createWriteRename && !defaultDeleted {
-				continue
-			}
-
-			if err := plugin.syncNetworkConfig(ctx); err != nil {
-				logrus.Errorf("CNI config loading failed, continue monitoring: %v", err)
-
-				continue
-			}
-
-		case err := <-plugin.watcher.Errors:
 			if err == nil {
 				continue
 			}
 
-			logrus.Errorf("CNI monitoring error %v", err)
+			// Events may have been dropped (for example on
+			// fsnotify.ErrEventOverflow), so resync the configuration.
+			logrus.Errorf("CNI monitoring error, resyncing config: %v", err)
 
-			return
+			if err := plugin.syncNetworkConfig(ctx); err != nil {
+				logrus.Errorf("CNI config loading failed, continue monitoring: %v", err)
+			}
 
 		case <-plugin.shutdownChan:
 			return
 		}
+	}
+}
+
+func (plugin *cniNetworkPlugin) handleWatcherEvent(ctx context.Context, event fsnotify.Event) {
+	if slices.Contains([]string{".conf", ".conflist", ".json"}, filepath.Ext(event.Name)) {
+		logrus.Infof("CNI monitoring event %v", event)
+	}
+
+	var defaultDeleted bool
+
+	createWriteRename := event.Has(fsnotify.Create) ||
+		event.Has(fsnotify.Write) ||
+		event.Has(fsnotify.Rename)
+
+	if event.Has(fsnotify.Remove) {
+		// Care about the event if the default network
+		// was just deleted
+		defNet := plugin.getDefaultNetwork()
+		if defNet != nil && event.Name == defNet.filePath {
+			defaultDeleted = true
+		}
+	}
+
+	if !createWriteRename && !defaultDeleted {
+		return
+	}
+
+	if err := plugin.syncNetworkConfig(ctx); err != nil {
+		logrus.Errorf("CNI config loading failed, continue monitoring: %v", err)
 	}
 }
 
@@ -292,12 +305,9 @@ func initCNI(exec cniinvoke.Exec, cacheDir, defaultNetName, confDir string, useI
 			return nil, err
 		}
 
-		startWg := sync.WaitGroup{}
-		startWg.Add(1)
+		plugin.done.Add(1)
 
-		go plugin.monitorConfDir(ctx, &startWg)
-
-		startWg.Wait()
+		go plugin.monitorConfDir(ctx)
 	}
 
 	return plugin, nil
@@ -416,9 +426,12 @@ func loadConfList(confFile string) *libcni.NetworkConfigList {
 	return confList
 }
 
-const loIfname string = "lo"
+const loIfname = "lo"
 
-const keyValuePairLen = 2
+const (
+	keyValuePairLen = 2
+	maxIfaceNum     = 10000
+)
 
 func (plugin *cniNetworkPlugin) syncNetworkConfig(ctx context.Context) error {
 	networks, defaultNetName, err := loadNetworks(ctx, plugin.confDir, plugin.cniConfig)
@@ -549,7 +562,7 @@ func (plugin *cniNetworkPlugin) fillPodNetworks(podNetwork *PodNetwork) error {
 netLoop:
 	for i, network := range podNetwork.Networks {
 		if network.Ifname == "" {
-			for j := range 10000 {
+			for j := range maxIfaceNum {
 				candidate := fmt.Sprintf("eth%d", j)
 				if !allIfNames[candidate] {
 					allIfNames[candidate] = true
@@ -665,7 +678,14 @@ func (plugin *cniNetworkPlugin) SetUpPodWithContext(ctx context.Context, podNetw
 		return nil, err
 	}
 
+	type attached struct {
+		network *cniNetwork
+		rt      *libcni.RuntimeConf
+	}
+
 	results := make([]NetResult, 0)
+
+	var rollback []attached
 
 	if err := plugin.forEachNetwork(ctx, &podNetwork, false, func(network *cniNetwork, podNetwork *PodNetwork, rt *libcni.RuntimeConf) error {
 		fullPodName := buildFullPodName(podNetwork)
@@ -675,6 +695,8 @@ func (plugin *cniNetworkPlugin) SetUpPodWithContext(ctx context.Context, podNetw
 		if err != nil {
 			return fmt.Errorf("error adding pod %s to CNI network %q: %w", fullPodName, network.name, err)
 		}
+
+		rollback = append(rollback, attached{network: network, rt: rt})
 
 		results = append(results, NetResult{
 			Result: result,
@@ -686,6 +708,13 @@ func (plugin *cniNetworkPlugin) SetUpPodWithContext(ctx context.Context, podNetw
 
 		return nil
 	}); err != nil {
+		cleanupCtx := context.WithoutCancel(ctx)
+		for _, a := range slices.Backward(rollback) {
+			if delErr := a.network.deleteFromNetwork(cleanupCtx, a.rt, plugin.cniConfig); delErr != nil {
+				logrus.Errorf("Error rolling back pod network %q: %v", a.network.name, delErr)
+			}
+		}
+
 		return nil, err
 	}
 
