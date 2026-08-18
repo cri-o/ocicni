@@ -29,6 +29,27 @@ jobs:
       - name: Build on ${{ matrix.arch }}
         run: make GOARCH=${{ matrix.arch }}
 
+  build-cross-platform:
+    name: Build / ${{ matrix.goos }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        goos:
+          - freebsd
+          - windows
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Build on ${{ matrix.goos }}
+        run: CGO_ENABLED=0 GOOS=${{ matrix.goos }} go build ./...
+
   test-linux:
     name: Run tests on Linux amd64
     runs-on: ubuntu-latest
@@ -39,9 +60,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Install test binaries
-        run: |
-          go install github.com/modocache/gover@latest
-          go install github.com/mattn/goveralls@latest
+        run: go install github.com/mattn/goveralls@latest
 
       - name: test
         run: PATH=$PATH:$(go env GOPATH)/bin COVERALLS=1 make check
@@ -52,8 +71,7 @@ jobs:
           COVERALLS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           PATH=$PATH:$(go env GOPATH)/bin
-          gover
-          goveralls -coverprofile=gover.coverprofile -service=github
+          goveralls -coverprofile=coverage.out -service=github
 
   lint:
     name: Run golangci-lint
