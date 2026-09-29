@@ -222,6 +222,15 @@ func ensureCIDR(cidr string) *net.IPNet {
 	return network
 }
 
+const (
+	testPodName      = "pod1"
+	testPodNamespace = "namespace1"
+	testPodUID       = "9414bd03-b3d3-453e-9d9f-47dcee07958c"
+	testCNIVersion   = "0.3.1"
+	testMAC          = "01:23:45:67:89:01"
+	testBinDir       = "/opt/cni/bin"
+)
+
 var _ = Describe("ocicni operations", func() {
 	var (
 		tmpDir    string
@@ -259,12 +268,12 @@ var _ = Describe("ocicni operations", func() {
 	})
 
 	It("finds an existing default network configuration", func() {
-		_, _, err := writeConfig(tmpDir, "5-notdefault.conf", "notdefault", "myplugin", "0.3.1")
+		_, _, err := writeConfig(tmpDir, "5-notdefault.conf", "notdefault", "myplugin", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
-		_, _, err = writeConfig(tmpDir, "10-test.conf", "test", "myplugin", "0.3.1")
+		_, _, err = writeConfig(tmpDir, "10-test.conf", "test", "myplugin", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
 
-		ocicni, err := initCNI(&fakeExec{}, "", "test", tmpDir, false, "/opt/cni/bin")
+		ocicni, err := initCNI(&fakeExec{}, "", "test", tmpDir, false, testBinDir)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ocicni.Status()).NotTo(HaveOccurred())
 
@@ -281,15 +290,15 @@ var _ = Describe("ocicni operations", func() {
 	})
 
 	It("finds an asynchronously written default network configuration", func() {
-		ocicni, err := initCNI(&fakeExec{}, "", "test", tmpDir, true, "/opt/cni/bin")
+		ocicni, err := initCNI(&fakeExec{}, "", "test", tmpDir, true, testBinDir)
 		Expect(err).NotTo(HaveOccurred())
 
 		// Writing a config that doesn't match the default network
-		_, _, err = writeConfig(tmpDir, "5-notdefault.conf", "notdefault", "myplugin", "0.3.1")
+		_, _, err = writeConfig(tmpDir, "5-notdefault.conf", "notdefault", "myplugin", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
 		Consistently(ocicni.Status, 5).Should(HaveOccurred())
 
-		_, _, err = writeConfig(tmpDir, "10-test.conf", "test", "myplugin", "0.3.1")
+		_, _, err = writeConfig(tmpDir, "10-test.conf", "test", "myplugin", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(ocicni.Status, 5).Should(Succeed())
 
@@ -309,7 +318,7 @@ var _ = Describe("ocicni operations", func() {
 		ocicni, err := initCNI(fExec, "", "test", tmpDir, true, tmpBinDir)
 		Expect(err).NotTo(HaveOccurred())
 
-		_, _, err = writeConfig(tmpDir, "10-test.conf", "test", "myplugin", "0.3.1")
+		_, _, err = writeConfig(tmpDir, "10-test.conf", "test", "myplugin", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
 		Consistently(ocicni.Status, 5).ShouldNot(Succeed())
 
@@ -346,12 +355,12 @@ var _ = Describe("ocicni operations", func() {
 
 	//nolint:dupl // no need to dedup for tests
 	It("should monitor the net conf dir for changes when default network is not specified", func() {
-		_, _, err := writeConfig(tmpDir, "5-notdefault.conf", "notdefault", "myplugin", "0.3.1")
+		_, _, err := writeConfig(tmpDir, "5-notdefault.conf", "notdefault", "myplugin", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
-		_, _, err = writeConfig(tmpDir, "10-test.conf", "test", "myplugin", "0.3.1")
+		_, _, err = writeConfig(tmpDir, "10-test.conf", "test", "myplugin", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
 
-		ocicni, err := initCNI(&fakeExec{}, "", "", tmpDir, true, "/opt/cni/bin")
+		ocicni, err := initCNI(&fakeExec{}, "", "", tmpDir, true, testBinDir)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ocicni.Status()).NotTo(HaveOccurred())
 
@@ -365,7 +374,7 @@ var _ = Describe("ocicni operations", func() {
 		Expect(net.config.Plugins[0].Network.Type).To(Equal("myplugin"))
 
 		// If a CNI config file is updated, default network name should be reloaded real-time
-		_, _, err = writeConfig(tmpDir, "10-test.conf", "secondary", "testplugin", "0.3.1")
+		_, _, err = writeConfig(tmpDir, "10-test.conf", "secondary", "testplugin", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
 
 		Consistently(ocicni.Status, 5).Should(Succeed())
@@ -380,12 +389,12 @@ var _ = Describe("ocicni operations", func() {
 
 	//nolint:dupl // no need to dedup for tests
 	It("should monitor the net conf dir for changes when default network is specified", func() {
-		_, _, err := writeConfig(tmpDir, "5-notdefault.conf", "notdefault", "myplugin", "0.3.1")
+		_, _, err := writeConfig(tmpDir, "5-notdefault.conf", "notdefault", "myplugin", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
-		_, _, err = writeConfig(tmpDir, "10-test.conf", "test", "myplugin", "0.3.1")
+		_, _, err = writeConfig(tmpDir, "10-test.conf", "test", "myplugin", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
 
-		ocicni, err := initCNI(&fakeExec{}, "", "test", tmpDir, true, "/opt/cni/bin")
+		ocicni, err := initCNI(&fakeExec{}, "", "test", tmpDir, true, testBinDir)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(ocicni.Status()).NotTo(HaveOccurred())
 
@@ -399,7 +408,7 @@ var _ = Describe("ocicni operations", func() {
 		Expect(net.config.Plugins[0].Network.Type).To(Equal("myplugin"))
 
 		// If a CNI config file is updated, default network name should be reloaded real-time
-		_, _, err = writeConfig(tmpDir, "10-test.conf", "test", "testplugin", "0.3.1")
+		_, _, err = writeConfig(tmpDir, "10-test.conf", "test", "testplugin", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
 
 		Consistently(ocicni.Status, 5).Should(Succeed())
@@ -414,14 +423,14 @@ var _ = Describe("ocicni operations", func() {
 
 	It("finds and refinds an asynchronously written default network configuration", func() {
 		f := &fakeExec{}
-		ocicni, err := initCNI(f, "", "test", tmpDir, true, "/opt/cni/bin")
+		ocicni, err := initCNI(f, "", "test", tmpDir, true, testBinDir)
 		Expect(err).NotTo(HaveOccurred())
 
 		err = ocicni.Status()
 		Expect(err).To(HaveOccurred())
 
 		// Write the default network config
-		_, confPath, err := writeConfig(tmpDir, "10-test.conf", "test", "myplugin", "0.3.1")
+		_, confPath, err := writeConfig(tmpDir, "10-test.conf", "test", "myplugin", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
 		Eventually(ocicni.Status, 5).Should(Succeed())
 
@@ -457,12 +466,12 @@ var _ = Describe("ocicni operations", func() {
 	})
 
 	It("finds an ASCIIbetically first network configuration as default real-time if given no default network name", func() {
-		ocicni, err := initCNI(&fakeExec{}, "", "", tmpDir, true, "/opt/cni/bin")
+		ocicni, err := initCNI(&fakeExec{}, "", "", tmpDir, true, testBinDir)
 		Expect(err).NotTo(HaveOccurred())
 
-		_, _, err = writeConfig(tmpDir, "15-test.conf", "test", "myplugin", "0.3.1")
+		_, _, err = writeConfig(tmpDir, "15-test.conf", "test", "myplugin", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
-		_, _, err = writeConfig(tmpDir, "5-notdefault.conf", "notdefault", "myplugin", "0.3.1")
+		_, _, err = writeConfig(tmpDir, "5-notdefault.conf", "notdefault", "myplugin", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
 
 		Eventually(ocicni.Status, 5).Should(Succeed())
@@ -477,7 +486,7 @@ var _ = Describe("ocicni operations", func() {
 
 		// If a new CNI config file is added, default network name should be reloaded real-time
 		// by file sorting
-		_, _, err = writeConfig(tmpDir, "10-abc.conf", "newdefault", "myplugin", "0.3.1")
+		_, _, err = writeConfig(tmpDir, "10-abc.conf", "newdefault", "myplugin", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
 
 		Consistently(ocicni.Status, 5).Should(Succeed())
@@ -492,16 +501,16 @@ var _ = Describe("ocicni operations", func() {
 
 	It("returns correct default network from loadNetworks()", func() {
 		// Writing a config that doesn't match the default network
-		_, _, err := writeConfig(tmpDir, "5-network1.conf", "network1", "myplugin", "0.3.1")
+		_, _, err := writeConfig(tmpDir, "5-network1.conf", "network1", "myplugin", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
-		_, _, err = writeConfig(tmpDir, "10-network2.conf", "network2", "myplugin", "0.3.1")
+		_, _, err = writeConfig(tmpDir, "10-network2.conf", "network2", "myplugin", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
-		_, _, err = writeConfig(tmpDir, "30-network3.conf", "network3", "myplugin", "0.3.1")
+		_, _, err = writeConfig(tmpDir, "30-network3.conf", "network3", "myplugin", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
-		_, _, err = writeConfig(tmpDir, "afdsfdsafdsa-network3.conf", "network4", "myplugin", "0.3.1")
+		_, _, err = writeConfig(tmpDir, "afdsfdsafdsa-network3.conf", "network4", "myplugin", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
 
-		cniConfig := libcni.NewCNIConfig([]string{"/opt/cni/bin"}, &fakeExec{})
+		cniConfig := libcni.NewCNIConfig([]string{testBinDir}, &fakeExec{})
 		netMap, defname, err := loadNetworks(context.TODO(), tmpDir, cniConfig)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(netMap).To(HaveLen(4))
@@ -510,7 +519,7 @@ var _ = Describe("ocicni operations", func() {
 	})
 
 	It("returns no error from loadNetworks() when no config files exist", func() {
-		cniConfig := libcni.NewCNIConfig([]string{"/opt/cni/bin"}, &fakeExec{})
+		cniConfig := libcni.NewCNIConfig([]string{testBinDir}, &fakeExec{})
 		netMap, defname, err := loadNetworks(context.TODO(), tmpDir, cniConfig)
 		Expect(err).NotTo(HaveOccurred())
 		Expect(netMap).To(BeEmpty())
@@ -520,14 +529,14 @@ var _ = Describe("ocicni operations", func() {
 
 	It("ignores subsequent duplicate network names in loadNetworks()", func() {
 		// Writing a config that doesn't match the default network
-		_, _, err := writeConfig(tmpDir, "10-network2.conf", "network2", "myplugin", "0.3.1")
+		_, _, err := writeConfig(tmpDir, "10-network2.conf", "network2", "myplugin", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
-		_, _, err = writeConfig(tmpDir, "30-network3.conf", "network3", "myplugin", "0.3.1")
+		_, _, err = writeConfig(tmpDir, "30-network3.conf", "network3", "myplugin", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
-		_, _, err = writeConfig(tmpDir, "5-network1.conf", "network2", "myplugin2", "0.3.1")
+		_, _, err = writeConfig(tmpDir, "5-network1.conf", "network2", "myplugin2", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
 
-		cniConfig := libcni.NewCNIConfig([]string{"/opt/cni/bin"}, &fakeExec{})
+		cniConfig := libcni.NewCNIConfig([]string{testBinDir}, &fakeExec{})
 		netMap, _, err := loadNetworks(context.TODO(), tmpDir, cniConfig)
 		Expect(err).NotTo(HaveOccurred())
 
@@ -540,7 +549,7 @@ var _ = Describe("ocicni operations", func() {
 	})
 
 	It("build different runtime configs", func() {
-		ifName := "eth0"
+		ifName := DefaultInterfaceName
 		podNetwork := &PodNetwork{}
 
 		var (
@@ -661,16 +670,16 @@ var _ = Describe("ocicni operations", func() {
 	})
 
 	It("sets up and tears down a pod using the default network", func() {
-		conf, _, err := writeConfig(tmpDir, "10-network2.conf", "network2", "myplugin", "0.3.1")
+		conf, _, err := writeConfig(tmpDir, "10-network2.conf", "network2", "myplugin", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
 
 		fake := &fakeExec{}
 		expectedResult := &cniv04.Result{
-			CNIVersion: "0.3.1",
+			CNIVersion: testCNIVersion,
 			Interfaces: []*cniv04.Interface{
 				{
-					Name:    "eth0",
-					Mac:     "01:23:45:67:89:01",
+					Name:    DefaultInterfaceName,
+					Mac:     testMAC,
 					Sandbox: networkNS.Path(),
 				},
 			},
@@ -684,14 +693,14 @@ var _ = Describe("ocicni operations", func() {
 		}
 		fake.addPlugin(nil, conf, expectedResult)
 
-		ocicni, err := initCNI(fake, cacheDir, "network2", tmpDir, true, "/opt/cni/bin")
+		ocicni, err := initCNI(fake, cacheDir, "network2", tmpDir, true, testBinDir)
 		Expect(err).NotTo(HaveOccurred())
 
 		podNet := PodNetwork{
-			Name:      "pod1",
-			Namespace: "namespace1",
+			Name:      testPodName,
+			Namespace: testPodNamespace,
 			ID:        "1234567890",
-			UID:       "9414bd03-b3d3-453e-9d9f-47dcee07958c",
+			UID:       testPodUID,
 			NetNS:     networkNS.Path(),
 		}
 		results, err := ocicni.SetUpPod(podNet)
@@ -851,21 +860,21 @@ var _ = Describe("ocicni operations", func() {
 	})
 
 	It("sets up and tears down a pod using specified networks", func() {
-		_, _, err := writeConfig(tmpDir, "10-network2.conf", "network2", "myplugin", "0.3.1")
+		_, _, err := writeConfig(tmpDir, "10-network2.conf", "network2", "myplugin", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
 
-		conf1, _, err := writeConfig(tmpDir, "20-network3.conf", "network3", "myplugin", "0.3.1")
+		conf1, _, err := writeConfig(tmpDir, "20-network3.conf", "network3", "myplugin", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
-		conf2, _, err := writeConfig(tmpDir, "30-network4.conf", "network4", "myplugin", "0.3.1")
+		conf2, _, err := writeConfig(tmpDir, "30-network4.conf", "network4", "myplugin", testCNIVersion)
 		Expect(err).NotTo(HaveOccurred())
 
 		fake := &fakeExec{}
 		expectedResult1 := &cniv04.Result{
-			CNIVersion: "0.3.1",
+			CNIVersion: testCNIVersion,
 			Interfaces: []*cniv04.Interface{
 				{
-					Name:    "eth0",
-					Mac:     "01:23:45:67:89:01",
+					Name:    DefaultInterfaceName,
+					Mac:     testMAC,
 					Sandbox: networkNS.Path(),
 				},
 			},
@@ -880,7 +889,7 @@ var _ = Describe("ocicni operations", func() {
 		fake.addPlugin(nil, conf1, expectedResult1)
 
 		expectedResult2 := &cniv04.Result{
-			CNIVersion: "0.3.1",
+			CNIVersion: testCNIVersion,
 			Interfaces: []*cniv04.Interface{
 				{
 					Name:    "eth1",
@@ -897,14 +906,14 @@ var _ = Describe("ocicni operations", func() {
 		}
 		fake.addPlugin(nil, conf2, expectedResult2)
 
-		ocicni, err := initCNI(fake, cacheDir, "network2", tmpDir, true, "/opt/cni/bin")
+		ocicni, err := initCNI(fake, cacheDir, "network2", tmpDir, true, testBinDir)
 		Expect(err).NotTo(HaveOccurred())
 
 		podNet := PodNetwork{
-			Name:      "pod1",
-			Namespace: "namespace1",
+			Name:      testPodName,
+			Namespace: testPodNamespace,
 			ID:        "1234567890",
-			UID:       "9414bd03-b3d3-453e-9d9f-47dcee07958c",
+			UID:       testPodUID,
 			NetNS:     networkNS.Path(),
 			Networks: []NetAttachment{
 				{Name: "network3"},
@@ -943,8 +952,8 @@ var _ = Describe("ocicni operations", func() {
 			CNIVersion: "0.4.0",
 			Interfaces: []*cniv04.Interface{
 				{
-					Name:    "eth0",
-					Mac:     "01:23:45:67:89:01",
+					Name:    DefaultInterfaceName,
+					Mac:     testMAC,
 					Sandbox: networkNS.Path(),
 				},
 			},
@@ -977,14 +986,14 @@ var _ = Describe("ocicni operations", func() {
 		}
 		fake.addPlugin(nil, conf2, expectedResult2)
 
-		ocicni, err := initCNI(fake, cacheDir, "network2", tmpDir, true, "/opt/cni/bin")
+		ocicni, err := initCNI(fake, cacheDir, "network2", tmpDir, true, testBinDir)
 		Expect(err).NotTo(HaveOccurred())
 
 		podNet := PodNetwork{
-			Name:      "pod1",
-			Namespace: "namespace1",
+			Name:      testPodName,
+			Namespace: testPodNamespace,
 			ID:        "1234567890",
-			UID:       "9414bd03-b3d3-453e-9d9f-47dcee07958c",
+			UID:       testPodUID,
 			NetNS:     networkNS.Path(),
 			Networks: []NetAttachment{
 				{Name: "network3"},
@@ -1036,14 +1045,14 @@ var _ = Describe("ocicni operations", func() {
 
 		fake.addPlugin(nil, expectedConf, nil)
 
-		ocicni, err := initCNI(fake, cacheDir, "network2", tmpDir, true, "/opt/cni/bin")
+		ocicni, err := initCNI(fake, cacheDir, "network2", tmpDir, true, testBinDir)
 		Expect(err).NotTo(HaveOccurred())
 
 		podNet := PodNetwork{
-			Name:      "pod1",
-			Namespace: "namespace1",
+			Name:      testPodName,
+			Namespace: testPodNamespace,
 			ID:        "1234567890",
-			UID:       "9414bd03-b3d3-453e-9d9f-47dcee07958c",
+			UID:       testPodUID,
 			NetNS:     networkNS.Path(),
 		}
 		err = ocicni.GC(context.Background(), []*PodNetwork{&podNet})
@@ -1068,14 +1077,14 @@ var _ = Describe("ocicni operations", func() {
 
 		fake.addPlugin(nil, expectedConf, nil)
 
-		ocicni, err := initCNI(fake, cacheDir, "network2", tmpDir, true, "/opt/cni/bin")
+		ocicni, err := initCNI(fake, cacheDir, "network2", tmpDir, true, testBinDir)
 		Expect(err).NotTo(HaveOccurred())
 
 		podNet := PodNetwork{
-			Name:      "pod1",
-			Namespace: "namespace1",
+			Name:      testPodName,
+			Namespace: testPodNamespace,
 			ID:        "1234567890",
-			UID:       "9414bd03-b3d3-453e-9d9f-47dcee07958c",
+			UID:       testPodUID,
 			NetNS:     networkNS.Path(),
 			Networks: []NetAttachment{
 				{Name: "network2", Ifname: "net1"},
@@ -1104,7 +1113,7 @@ var _ = Describe("ocicni operations", func() {
 
 		BeforeEach(func() {
 			// Unused default config
-			_, _, err := writeConfig(tmpDir, "10-test.conf", defaultNetName, "myplugin", "0.3.1")
+			_, _, err := writeConfig(tmpDir, "10-test.conf", defaultNetName, "myplugin", testCNIVersion)
 			Expect(err).NotTo(HaveOccurred())
 
 			conf1 := fmt.Sprintf(`{
@@ -1125,14 +1134,14 @@ var _ = Describe("ocicni operations", func() {
 			fake.addPlugin([]string{"CNI_IFNAME=" + ifname1}, conf1, nil)
 			fake.addPlugin([]string{"CNI_IFNAME=" + ifname2}, conf2, nil)
 
-			ocicni, err = initCNI(fake, cacheDir, defaultNetName, tmpDir, true, "/opt/cni/bin")
+			ocicni, err = initCNI(fake, cacheDir, defaultNetName, tmpDir, true, testBinDir)
 			Expect(err).NotTo(HaveOccurred())
 
 			podNet = PodNetwork{
-				Name:      "pod1",
-				Namespace: "namespace1",
+				Name:      testPodName,
+				Namespace: testPodNamespace,
 				ID:        containerID,
-				UID:       "9414bd03-b3d3-453e-9d9f-47dcee07958c",
+				UID:       testPodUID,
 				NetNS:     networkNS.Path(),
 			}
 		})
@@ -1193,16 +1202,16 @@ var _ = Describe("ocicni operations", func() {
 		fake.addPlugin(nil, conf1, nil)
 		fake.addPlugin(nil, conf2, nil)
 
-		ocicni, err := initCNI(fake, cacheDir, defaultNetName, tmpDir, true, "/opt/cni/bin")
+		ocicni, err := initCNI(fake, cacheDir, defaultNetName, tmpDir, true, testBinDir)
 		Expect(err).NotTo(HaveOccurred())
 
 		defer Expect(ocicni.Shutdown()).NotTo(HaveOccurred())
 
 		podNet := PodNetwork{
-			Name:      "pod1",
-			Namespace: "namespace1",
+			Name:      testPodName,
+			Namespace: testPodNamespace,
 			ID:        containerID,
-			UID:       "9414bd03-b3d3-453e-9d9f-47dcee07958c",
+			UID:       testPodUID,
 			NetNS:     networkNS.Path(),
 			Networks: []NetAttachment{
 				{Name: netName1},

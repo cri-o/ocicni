@@ -8,16 +8,9 @@ function testrun {
     sudo -E bash -c "umask 0; PATH=$PATH go test $@"
 }
 if [ ! -z "${COVERALLS:-""}" ]; then
-    # coverage profile only works per-package
-    PKGS="$(go list ./... | xargs echo)"
     echo "with coverage profile generation..."
-    i=0
-    for t in ${PKGS}; do
-        testrun "-race -covermode atomic -coverprofile ${i}.coverprofile ${t}"
-        i=$((i+1))
-    done
+    testrun "-race -covermode atomic -coverprofile coverage.out ./..."
 else
     echo "without coverage profile generation..."
     testrun "-race ./..."
 fi
-

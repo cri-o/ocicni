@@ -208,8 +208,6 @@ func (plugin *cniNetworkPlugin) monitorConfDir(ctx context.Context, start *sync.
 
 			logrus.Errorf("CNI monitoring error %v", err)
 
-			return
-
 		case <-plugin.shutdownChan:
 			return
 		}
@@ -404,9 +402,12 @@ func loadNetworks(ctx context.Context, confDir string, cni *libcni.CNIConfig) (n
 	return networks, defaultNetName, nil
 }
 
-const loIfname string = "lo"
+const loIfname = "lo"
 
-const keyValuePairLen = 2
+const (
+	keyValuePairLen = 2
+	maxIfaceNum     = 10000
+)
 
 func (plugin *cniNetworkPlugin) syncNetworkConfig(ctx context.Context) error {
 	networks, defaultNetName, err := loadNetworks(ctx, plugin.confDir, plugin.cniConfig)
@@ -537,7 +538,7 @@ func (plugin *cniNetworkPlugin) fillPodNetworks(podNetwork *PodNetwork) error {
 netLoop:
 	for i, network := range podNetwork.Networks {
 		if network.Ifname == "" {
-			for j := range 10000 {
+			for j := range maxIfaceNum {
 				candidate := fmt.Sprintf("eth%d", j)
 				if !allIfNames[candidate] {
 					allIfNames[candidate] = true
@@ -653,7 +654,14 @@ func (plugin *cniNetworkPlugin) SetUpPodWithContext(ctx context.Context, podNetw
 		return nil, err
 	}
 
+	type attached struct {
+		network *cniNetwork
+		rt      *libcni.RuntimeConf
+	}
+
 	results := make([]NetResult, 0)
+
+	var rollback []attached
 
 	if err := plugin.forEachNetwork(ctx, &podNetwork, false, func(network *cniNetwork, podNetwork *PodNetwork, rt *libcni.RuntimeConf) error {
 		fullPodName := buildFullPodName(podNetwork)
@@ -663,6 +671,8 @@ func (plugin *cniNetworkPlugin) SetUpPodWithContext(ctx context.Context, podNetw
 		if err != nil {
 			return fmt.Errorf("error adding pod %s to CNI network %q: %w", fullPodName, network.name, err)
 		}
+
+		rollback = append(rollback, attached{network: network, rt: rt})
 
 		results = append(results, NetResult{
 			Result: result,
@@ -674,6 +684,13 @@ func (plugin *cniNetworkPlugin) SetUpPodWithContext(ctx context.Context, podNetw
 
 		return nil
 	}); err != nil {
+		cleanupCtx := context.WithoutCancel(ctx)
+		for _, a := range slices.Backward(rollback) {
+			if delErr := a.network.deleteFromNetwork(cleanupCtx, a.rt, plugin.cniConfig); delErr != nil {
+				logrus.Errorf("Error rolling back pod network %q: %v", a.network.name, delErr)
+			}
+		}
+
 		return nil, err
 	}
 
