@@ -326,42 +326,9 @@ func loadNetworks(ctx context.Context, confDir string, cni *libcni.CNIConfig) (n
 	sort.Strings(files)
 
 	for _, confFile := range files {
-		var confList *libcni.NetworkConfigList
-		if strings.HasSuffix(confFile, ".conflist") {
-			confList, err = libcni.ConfListFromFile(confFile)
-			if err != nil {
-				// do not log ENOENT errors
-				if !errors.Is(err, fs.ErrNotExist) {
-					logrus.Errorf("Error loading CNI config list file %s: %v", confFile, err)
-				}
-
-				continue
-			}
-		} else {
-			bytes, err := os.ReadFile(confFile)
-			if err != nil {
-				logrus.Errorf("Error loading CNI config file %s: %v", confFile, err)
-
-				continue
-			}
-
-			conf, err := libcni.NetworkPluginConfFromBytes(bytes)
-			if err != nil {
-				// do not log ENOENT errors
-				if !errors.Is(err, fs.ErrNotExist) {
-					logrus.Errorf("Error loading CNI config file %s: %v", confFile, err)
-				}
-
-				continue
-			}
-
-			//nolint:staticcheck // we still require this function
-			confList, err = libcni.ConfListFromConf(conf)
-			if err != nil {
-				logrus.Errorf("Error converting CNI config file %s to list: %v", confFile, err)
-
-				continue
-			}
+		confList := loadConfList(confFile)
+		if confList == nil {
+			continue
 		}
 
 		if len(confList.Plugins) == 0 {
@@ -402,6 +369,51 @@ func loadNetworks(ctx context.Context, confDir string, cni *libcni.CNIConfig) (n
 	}
 
 	return networks, defaultNetName, nil
+}
+
+// loadConfList reads a CNI configuration list from the provided file. It
+// returns nil if the file could not be loaded.
+func loadConfList(confFile string) *libcni.NetworkConfigList {
+	if strings.HasSuffix(confFile, ".conflist") {
+		confList, err := libcni.ConfListFromFile(confFile)
+		if err != nil {
+			// do not log ENOENT errors
+			if !errors.Is(err, fs.ErrNotExist) {
+				logrus.Errorf("Error loading CNI config list file %s: %v", confFile, err)
+			}
+
+			return nil
+		}
+
+		return confList
+	}
+
+	bytes, err := os.ReadFile(confFile)
+	if err != nil {
+		logrus.Errorf("Error loading CNI config file %s: %v", confFile, err)
+
+		return nil
+	}
+
+	conf, err := libcni.NetworkPluginConfFromBytes(bytes)
+	if err != nil {
+		// do not log ENOENT errors
+		if !errors.Is(err, fs.ErrNotExist) {
+			logrus.Errorf("Error loading CNI config file %s: %v", confFile, err)
+		}
+
+		return nil
+	}
+
+	//nolint:staticcheck // we still require this function
+	confList, err := libcni.ConfListFromConf(conf)
+	if err != nil {
+		logrus.Errorf("Error converting CNI config file %s to list: %v", confFile, err)
+
+		return nil
+	}
+
+	return confList
 }
 
 const loIfname string = "lo"
@@ -955,7 +967,7 @@ func (network *cniNetwork) checkNetwork(ctx context.Context, rt *libcni.RuntimeC
 			}
 
 			ips = append(ips, &cniv1.IPConfig{
-				Interface: cniv1.Int(0),
+				Interface: new(0),
 				Address:   *ip,
 			})
 		} else {

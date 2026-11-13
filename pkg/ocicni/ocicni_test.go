@@ -676,7 +676,7 @@ var _ = Describe("ocicni operations", func() {
 			},
 			IPs: []*cniv04.IPConfig{
 				{
-					Interface: cniv04.Int(0),
+					Interface: new(0),
 					Version:   "4",
 					Address:   *ensureCIDR("1.1.1.2/24"),
 				},
@@ -737,7 +737,7 @@ var _ = Describe("ocicni operations", func() {
 			},
 			IPs: []*cniv04.IPConfig{
 				{
-					Interface: cniv04.Int(0),
+					Interface: new(0),
 					Version:   "4",
 					Address:   *ensureCIDR("1.1.1.2/24"),
 				},
@@ -789,7 +789,7 @@ var _ = Describe("ocicni operations", func() {
 			},
 			IPs: []*cniv04.IPConfig{
 				{
-					Interface: cniv04.Int(0),
+					Interface: new(0),
 					Version:   "4",
 					Address:   *ensureCIDR("1.1.1.2/24"),
 				},
@@ -871,7 +871,7 @@ var _ = Describe("ocicni operations", func() {
 			},
 			IPs: []*cniv04.IPConfig{
 				{
-					Interface: cniv04.Int(0),
+					Interface: new(0),
 					Version:   "4",
 					Address:   *ensureCIDR("1.1.1.2/24"),
 				},
@@ -890,7 +890,7 @@ var _ = Describe("ocicni operations", func() {
 			},
 			IPs: []*cniv04.IPConfig{
 				{
-					Interface: cniv04.Int(0),
+					Interface: new(0),
 					Address:   *ensureCIDR("1.1.1.3/24"),
 				},
 			},
@@ -950,7 +950,7 @@ var _ = Describe("ocicni operations", func() {
 			},
 			IPs: []*cniv04.IPConfig{
 				{
-					Interface: cniv04.Int(0),
+					Interface: new(0),
 					Version:   "4",
 					Address:   *ensureCIDR("1.1.1.2/24"),
 				},
@@ -969,7 +969,7 @@ var _ = Describe("ocicni operations", func() {
 			},
 			IPs: []*cniv04.IPConfig{
 				{
-					Interface: cniv04.Int(0),
+					Interface: new(0),
 					Version:   "4",
 					Address:   *ensureCIDR("1.1.1.3/24"),
 				},
