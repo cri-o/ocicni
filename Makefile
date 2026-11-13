@@ -11,7 +11,7 @@ BUILD_INFO := $(shell date +%s)
 
 BUILD_PATH := $(shell pwd)/build
 GOLANGCI_LINT := ${BUILD_PATH}/golangci-lint
-GOLANGCI_LINT_VERSION := v2.12.2
+GOLANGCI_LINT_VERSION := v2.15.0
 
 LDFLAGS := -ldflags '-X main.gitCommit=${GIT_COMMIT} -X main.buildInfo=${BUILD_INFO}'
 
