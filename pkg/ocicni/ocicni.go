@@ -955,7 +955,7 @@ func (network *cniNetwork) checkNetwork(ctx context.Context, rt *libcni.RuntimeC
 			}
 
 			ips = append(ips, &cniv1.IPConfig{
-				Interface: cniv1.Int(0),
+				Interface: new(0),
 				Address:   *ip,
 			})
 		} else {
